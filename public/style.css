@@ -386,6 +386,19 @@ html, body {
 
 .add-form { position: relative; display: flex; gap: 8px; margin-bottom: 6px; }
 
+.add-form {
+  flex-wrap: wrap; /* Zmiana: pozwala zrzucić pole input niżej na bardzo małych ekranach */
+}
+
+.shop-select {
+  flex: 0 0 140px; /* Stała szerokość dla wyboru sklepu */
+  padding: 13px 10px;
+}
+
+@media (max-width: 400px) {
+  .shop-select { flex: 1 1 100%; } /* Na małych telefonach sklep wskoczy nad produkt */
+}
+
 #add-input, .text-input, .textarea-input, select.text-input {
   flex: 1;
   border: 1px solid var(--line);
