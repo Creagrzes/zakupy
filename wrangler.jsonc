@@ -1,0 +1,23 @@
+{
+  "name": "zakupy",
+  "compatibility_date": "2026-07-17",
+  "main": "src/worker.js",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LIST_ROOM",
+        "class_name": "ListRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ListRoom"]
+    }
+  ]
+}
