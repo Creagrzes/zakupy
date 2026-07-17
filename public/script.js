@@ -431,6 +431,10 @@ function renderListView(id) {
     </div>` : ''}
     <section class="receipt${state.shoppingMode ? ' shopping-mode' : ''}">
       <form id="add-form" class="add-form" autocomplete="off">
+        <select id="add-shop" class="text-input shop-select" aria-label="Wybierz sklep">
+          <option value="">Wybierz sklep...</option>
+          ${state.shops.map(s => `<option value="${esc(s)}" ${state.activeAddShop === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+        </select>
         <input type="text" id="add-input" placeholder="Dodaj produkt…" autocomplete="off" maxlength="60">
         <div id="suggest-box"></div>
         <button type="submit" aria-label="Dodaj"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -476,11 +480,19 @@ function wireListView(listId, allItems) {
   const suggestBox = document.getElementById('suggest-box');
   const listEl = document.getElementById('list');
 
+  const addShopSelect = document.getElementById('add-shop');
+
+  // Zapisujemy wybrany sklep, żeby po odświeżeniu nadal był wybrany
+  addShopSelect.addEventListener('change', () => {
+    state.activeAddShop = addShopSelect.value;
+  });
+
   addForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const val = addInput.value.trim();
     if (!val) return;
-    sendAction('addItems', { listId, names: [val] });
+    // Wysyłamy akcję dodania produktu RAZEM z wybranym sklepem
+    sendAction('addItems', { listId, names: [val], shop: addShopSelect.value });
     addInput.value = '';
     suggestBox.innerHTML = '';
     addInput.focus();
@@ -496,7 +508,7 @@ function wireListView(listId, allItems) {
     suggestBox.innerHTML = hits.length ? `<div class="suggest-box">${hits.map((h) => `<div class="suggest-item" data-name="${esc(h.name)}">${esc(h.name)}</div>`).join('')}</div>` : '';
     suggestBox.querySelectorAll('.suggest-item').forEach((el) => {
       el.addEventListener('click', () => {
-        sendAction('addItems', { listId, names: [el.dataset.name] });
+        sendAction('addItems', { listId, names: [el.dataset.name], shop: addShopSelect.value });
         addInput.value = ''; suggestBox.innerHTML = ''; addInput.focus();
       });
     });
