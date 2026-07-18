@@ -422,6 +422,7 @@ function renderListView(id) {
     <div class="list-tools">
       <button type="button" class="tool-btn${state.groupByCategory ? ' active' : ''}" id="tool-group">📂 Kategorie</button>
       <button type="button" class="tool-btn${state.shoppingMode ? ' active' : ''}" id="tool-shopping">🏃 Tryb zakupów</button>
+      <button type="button" class="tool-btn" id="tool-assign-shop">🏷️ Dodaj sklepy</button>
       <button type="button" class="tool-btn" id="tool-history">🕒 Historia</button>
       <button type="button" class="tool-btn" id="tool-template">💾 Zapisz jako szablon</button>
     </div>
@@ -479,10 +480,8 @@ function wireListView(listId, allItems) {
   const addInput = document.getElementById('add-input');
   const suggestBox = document.getElementById('suggest-box');
   const listEl = document.getElementById('list');
-
   const addShopSelect = document.getElementById('add-shop');
 
-  // Zapisujemy wybrany sklep, żeby po odświeżeniu nadal był wybrany
   addShopSelect.addEventListener('change', () => {
     state.activeAddShop = addShopSelect.value;
   });
@@ -491,6 +490,15 @@ function wireListView(listId, allItems) {
     e.preventDefault();
     const val = addInput.value.trim();
     if (!val) return;
+
+    // NOWE: Sprawdzanie duplikatów (ignoruje wielkość liter)
+    const valLower = val.toLowerCase();
+    const exists = allItems.some(i => i.name.trim().toLowerCase() === valLower);
+    if (exists) {
+      showToast('⚠️ Nie możesz dodać. Ten produkt już jest na liście!');
+      return;
+    }
+
     // Wysyłamy akcję dodania produktu RAZEM z wybranym sklepem
     sendAction('addItems', { listId, names: [val], shop: addShopSelect.value });
     addInput.value = '';
@@ -508,7 +516,14 @@ function wireListView(listId, allItems) {
     suggestBox.innerHTML = hits.length ? `<div class="suggest-box">${hits.map((h) => `<div class="suggest-item" data-name="${esc(h.name)}">${esc(h.name)}</div>`).join('')}</div>` : '';
     suggestBox.querySelectorAll('.suggest-item').forEach((el) => {
       el.addEventListener('click', () => {
-        sendAction('addItems', { listId, names: [el.dataset.name], shop: addShopSelect.value });
+        // Zabezpieczenie przed duplikatem również przy dodawaniu z podpowiedzi
+        const selectedVal = el.dataset.name.toLowerCase();
+        const exists = allItems.some(i => i.name.trim().toLowerCase() === selectedVal);
+        if (exists) {
+            showToast('⚠️ Nie możesz dodać. Ten produkt już jest na liście!');
+        } else {
+            sendAction('addItems', { listId, names: [el.dataset.name], shop: addShopSelect.value });
+        }
         addInput.value = ''; suggestBox.innerHTML = ''; addInput.focus();
       });
     });
@@ -516,6 +531,7 @@ function wireListView(listId, allItems) {
 
   document.getElementById('tool-group').addEventListener('click', () => { state.groupByCategory = !state.groupByCategory; renderListView(listId); });
   document.getElementById('tool-shopping').addEventListener('click', () => { state.shoppingMode = !state.shoppingMode; renderListView(listId); });
+  document.getElementById('tool-assign-shop').addEventListener('click', () => openBulkShopModal(listId, allItems));
   document.getElementById('tool-history').addEventListener('click', () => openHistoryModal(listId));
   document.getElementById('tool-template').addEventListener('click', () => openSaveTemplateModal(listId));
 
@@ -624,35 +640,122 @@ function openSaveTemplateModal(listId) {
   });
 }
 
+function openBulkShopModal(listId, allItems) {
+  // Wybieramy tylko produkty, które nie mają sklepu i nie są kupione
+  const noShopItems = allItems.filter(i => !i.shop && !i.done);
+  
+  if (noShopItems.length === 0) {
+    showToast('Wszystkie produkty na liście mają już przypisany sklep (lub są odhaczone).');
+    return;
+  }
+
+  openModal(`
+    <h2>Przypisz sklep do produktów</h2>
+    <p class="welcome-sub">Wybierz sklep i zaznacz produkty, którym chcesz go nadać.</p>
+    <div class="field">
+      <select class="text-input" id="bulk-shop">
+        <option value="">-- Wybierz sklep --</option>
+        ${state.shops.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="bulk-list" style="max-height: 250px; overflow-y: auto; background: var(--bg-soft); border-radius: 12px; padding: 10px; margin-bottom: 15px;">
+      ${noShopItems.map(it => `
+        <label class="check-row" style="padding: 8px 4px;">
+          <input type="checkbox" value="${it.id}" checked>
+          <span>${it.emoji} ${esc(it.name)}</span>
+        </label>
+      `).join('')}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" id="bulk-cancel">Anuluj</button>
+      <button type="button" class="btn-primary" id="bulk-save">Przypisz</button>
+    </div>
+  `, (root) => {
+    root.querySelector('#bulk-cancel').onclick = closeModal;
+    root.querySelector('#bulk-save').onclick = () => {
+      const shop = root.querySelector('#bulk-shop').value;
+      if (!shop) { showToast('Wybierz sklep z listy!'); return; }
+      
+      const checkedIds = [...root.querySelectorAll('.bulk-list input:checked')].map(el => el.value);
+      if (checkedIds.length === 0) { showToast('Zaznacz co najmniej jeden produkt!'); return; }
+      
+      sendAction('updateItemsShop', { listId, itemIds: checkedIds, shop });
+      closeModal();
+      showToast(`Przypisano sklep do ${checkedIds.length} produktów.`);
+    };
+  });
+}
+
 // =====================================================================
 // SZABLONY
 // =====================================================================
 
 function renderTemplates() {
   const templates = state.templates;
+  let html = '';
+  
   if (!templates.length) {
-    viewEl.innerHTML = `<div class="empty-state"><p>Brak szablonów.</p><p class="empty-sub">Otwórz dowolną listę i zapisz ją jako szablon.</p></div>`;
-    return;
-  }
-  viewEl.innerHTML = templates.map((t) => `
-    <div class="plain-card">
-      <p class="plain-card-title">${esc(t.name)}</p>
-      <p class="plain-card-sub">${t.items.length} produktów</p>
-      <div class="card-actions">
-        <button type="button" class="text-btn" data-use="${t.id}">Utwórz listę</button>
-        <button type="button" class="text-btn danger" data-del="${t.id}">Usuń</button>
+    html = `<div class="empty-state"><p>Brak szablonów.</p><p class="empty-sub">Stwórz nowy z przycisku poniżej lub zapisz istniejącą listę jako szablon.</p></div>`;
+  } else {
+    html = templates.map((t) => `
+      <div class="plain-card">
+        <p class="plain-card-title">${esc(t.name)}</p>
+        <p class="plain-card-sub">${t.items.length} produktów</p>
+        <div class="card-actions">
+          <button type="button" class="text-btn" data-use="${t.id}">Utwórz listę</button>
+          <button type="button" class="text-btn danger" data-del="${t.id}">Usuń</button>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `).join('');
+  }
+  
+  html += `<button type="button" class="fab" id="new-template-fab" aria-label="Nowy szablon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
+  
+  viewEl.innerHTML = html;
+  
   viewEl.querySelectorAll('[data-use]').forEach((btn) => btn.addEventListener('click', () => {
     const t = templates.find((x) => x.id === btn.dataset.use);
     sendAction('createList', { name: t.name, templateId: t.id, icon: '🛒', color: COLORS[0] });
     showToast('Utworzono listę z szablonu');
     location.hash = '#home';
   }));
+  
   viewEl.querySelectorAll('[data-del]').forEach((btn) => btn.addEventListener('click', () => {
     if (confirm('Usunąć ten szablon?')) sendAction('deleteTemplate', { id: btn.dataset.del });
   }));
+
+  document.getElementById('new-template-fab').addEventListener('click', openNewTemplateModal);
+}
+
+function openNewTemplateModal() {
+  openModal(`
+    <h2>Nowy szablon</h2>
+    <div class="field">
+      <label>Nazwa szablonu</label>
+      <input class="text-input" id="tpl-name" placeholder="np. Przepis na lasagne" maxlength="60">
+    </div>
+    <div class="field">
+      <label>Produkty (każdy w nowej linii)</label>
+      <textarea class="text-input textarea-input" id="tpl-items" rows="6" placeholder="Makaron\nMięso mielone\nSos pomidorowy\nSer"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" id="tpl-cancel">Anuluj</button>
+      <button type="button" class="btn-primary" id="tpl-save">Zapisz szablon</button>
+    </div>
+  `, (root) => {
+    root.querySelector('#tpl-cancel').onclick = closeModal;
+    root.querySelector('#tpl-save').onclick = () => {
+      const name = root.querySelector('#tpl-name').value.trim();
+      const itemsText = root.querySelector('#tpl-items').value;
+      const items = itemsText.split('\n').filter(i => i.trim() !== '');
+      
+      if (!name) { showToast('Podaj nazwę szablonu!'); return; }
+      
+      sendAction('createTemplate', { name, items });
+      closeModal();
+      showToast('Utworzono nowy szablon');
+    };
+  });
 }
 
 // =====================================================================
@@ -720,6 +823,12 @@ function openSettingsModal() {
   const theme = document.documentElement.getAttribute('data-theme') || 'light';
   openModal(`
     <h2>Ustawienia</h2>
+    
+    <div class="settings-row" style="display:flex; gap:10px;">
+      <button type="button" class="btn-secondary" id="go-stats" style="flex:1;">📊 Statystyki</button>
+      <button type="button" class="btn-secondary" id="go-archive" style="flex:1;">📦 Archiwum</button>
+    </div>
+
     <div class="settings-row">
       <div><p class="settings-label">Kto robi zakupy</p><p class="settings-sub">Zmiana imienia widocznego przy dodanych produktach</p></div>
       <div class="segmented" id="s-user">
@@ -749,6 +858,9 @@ function openSettingsModal() {
       <button type="button" class="btn-primary" id="s-close">Zamknij</button>
     </div>
   `, (root) => {
+    root.querySelector('#go-stats').onclick = () => { closeModal(); location.hash = '#stats'; };
+    root.querySelector('#go-archive').onclick = () => { closeModal(); location.hash = '#archive'; };
+    
     root.querySelector('#s-user').addEventListener('click', (e) => {
       const btn = e.target.closest('button'); if (!btn) return;
       state.myName = btn.dataset.v; localStorage.setItem(NAME_KEY, state.myName);
