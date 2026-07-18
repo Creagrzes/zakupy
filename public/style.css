@@ -385,20 +385,9 @@ html, body {
   filter: drop-shadow(0 6px 6px rgba(54,47,38,0.06));
 }
 
-.add-form { position: relative; display: flex; gap: 8px; margin-bottom: 6px; }
-
-.add-form {
-  flex-wrap: wrap; /* Zmiana: pozwala zrzucić pole input niżej na bardzo małych ekranach */
-}
-
-.shop-select {
-  flex: 0 0 140px; /* Stała szerokość dla wyboru sklepu */
-  padding: 13px 10px;
-}
-
-@media (max-width: 400px) {
-  .shop-select { flex: 1 1 100%; } /* Na małych telefonach sklep wskoczy nad produkt */
-}
+.add-form { position: relative; display: flex; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;}
+.shop-select { flex: 0 0 140px; padding: 13px 10px; }
+@media (max-width: 400px) { .shop-select { flex: 1 1 100%; } }
 
 #add-input, .text-input, .textarea-input, select.text-input {
   flex: 1;
@@ -415,11 +404,7 @@ html, body {
 }
 #add-input:focus, .text-input:focus, .textarea-input:focus { border-color: var(--sage); }
 
-.textarea-input {
-  resize: vertical;
-  min-height: 100px;
-  font-family: inherit;
-}
+.textarea-input { resize: vertical; min-height: 100px; font-family: inherit; }
 
 .add-form button {
   border: none;
@@ -449,60 +434,23 @@ html, body {
   z-index: 10;
   overflow: hidden;
 }
-.suggest-item {
-  padding: 10px 14px;
-  font-size: 14px;
-  cursor: pointer;
-}
+.suggest-item { padding: 10px 14px; font-size: 14px; cursor: pointer; }
 .suggest-item:hover { background: var(--sage-soft); }
 
 .list { list-style: none; margin: 0; padding: 0; }
-.cat-group-title {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  padding: 14px 2px 6px;
-}
+.cat-group-title { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); padding: 14px 2px 6px; }
 
-.item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 2px;
-  border-bottom: 1px dashed var(--line);
-  animation: fadeIn 0.2s ease;
-}
+.item { display: flex; align-items: center; gap: 10px; padding: 11px 2px; border-bottom: 1px dashed var(--line); animation: fadeIn 0.2s ease; }
 .item:last-child { border-bottom: none; }
 .item.dragging { opacity: 0.4; }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
-.drag-handle {
-  color: var(--ink-faint);
-  cursor: grab;
-  flex-shrink: 0;
-  font-size: 14px;
-  touch-action: none;
-  padding: 4px;
-}
+.drag-handle { color: var(--ink-faint); cursor: grab; flex-shrink: 0; font-size: 14px; touch-action: none; padding: 4px; }
 
 .check {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid var(--ink-faint);
-  background: transparent;
-  flex-shrink: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--ink-faint);
+  background: transparent; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
   transition: background 0.15s, border-color 0.15s;
 }
 .check svg { width: 12px; height: 12px; opacity: 0; transform: scale(0.6); transition: opacity 0.15s, transform 0.15s; }
@@ -510,52 +458,16 @@ html, body {
 .item.done .check svg { opacity: 1; transform: scale(1); }
 
 .item-emoji { font-size: 17px; flex-shrink: 0; }
-
 .item-body { flex: 1; min-width: 0; cursor: pointer; }
-
 .item-name { font-size: 15.5px; line-height: 1.3; word-break: break-word; transition: color 0.15s; }
 .item.done .item-name { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--ink-faint); }
-
-.item-meta {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10.5px;
-  color: var(--ink-faint);
-  margin-top: 2px;
-  letter-spacing: 0.02em;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
+.item-meta { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--ink-faint); margin-top: 2px; letter-spacing: 0.02em; display: flex; gap: 6px; flex-wrap: wrap; }
 .item-meta .tag { background: var(--bg-soft); padding: 1px 6px; border-radius: 6px; }
 
-.assign-btn {
-  border: none;
-  background: var(--bg-soft);
-  color: var(--ink-soft);
-  font-size: 10px;
-  font-family: 'IBM Plex Mono', monospace;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  cursor: pointer;
-  flex-shrink: 0;
-}
+.assign-btn { border: none; background: var(--bg-soft); color: var(--ink-soft); font-size: 10px; font-family: 'IBM Plex Mono', monospace; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; flex-shrink: 0; }
 .assign-btn.set { background: var(--sage); color: #fff; }
 
-.del-btn {
-  border: none;
-  background: transparent;
-  color: var(--ink-faint);
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
-}
+.del-btn { border: none; background: transparent; color: var(--ink-faint); width: 28px; height: 28px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s, color 0.15s; }
 .del-btn:hover { background: var(--bg-soft); color: var(--rose); }
 
 .footer-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 6px 0; }
@@ -572,19 +484,8 @@ html, body {
 .shopping-mode #add-input { display: none; }
 .shopping-mode .add-form button { display: none; }
 
-/* ---------- Historia (drawer) ---------- */
-.history-list { list-style: none; margin: 0; padding: 0; }
-.history-list li { padding: 10px 2px; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
-.history-time { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--ink-faint); display: block; margin-top: 2px; }
-
-/* ---------- Karty ogólne (szablony/archiwum/statystyki) ---------- */
-.plain-card {
-  background: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px;
-  margin-bottom: 10px;
-}
+/* ---------- Karty ogólne ---------- */
+.plain-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 10px; }
 .plain-card-title { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 500; margin: 0 0 4px; }
 .plain-card-sub { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 10px; }
 .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -599,6 +500,60 @@ html, body {
 .fav-row { display: flex; justify-content: space-between; padding: 8px 2px; border-bottom: 1px dashed var(--line); font-size: 14px; }
 .fav-row:last-child { border-bottom: none; }
 .fav-count { color: var(--ink-faint); font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+
+/* ---------- Toggle Switch ---------- */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; margin: 14px 0; }
+.toggle-row-text { display: flex; flex-direction: column; }
+.toggle-label { font-size: 14px; font-weight: 600; color: var(--ink); }
+.toggle-hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; flex: 0 0 auto; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch-track { position: absolute; inset: 0; background: var(--bg-soft); border-radius: 999px; transition: background .18s ease; }
+.switch-thumb { position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.28); transition: transform .18s cubic-bezier(.3,1.4,.4,1); }
+.switch input:checked + .switch-track { background: var(--sage); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+
+/* ---------- Edytor Notatek ---------- */
+.note-top-bar { margin-bottom: 10px; }
+.note-canvas-wrap {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  position: relative; overflow-x: hidden; min-height: 400px;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.note-canvas { position: relative; padding: 18px 16px 120px 16px; min-height: 100%; }
+#text-editor { outline: none; font-size: 16.5px; line-height: 1.65; min-height: 120px; white-space: pre-wrap; }
+#text-editor:empty:before { content: attr(data-placeholder); color: var(--ink-soft); pointer-events: none; }
+#text-editor ul { margin: 6px 0; padding-left: 22px; }
+#text-editor li { margin-bottom: 4px; }
+#text-editor b, #text-editor strong { color: var(--sage); }
+
+.note-toolbar {
+  display: flex; gap: 6px; margin-top: 10px; padding: 10px;
+  background: var(--card); border-radius: 14px; box-shadow: var(--shadow);
+}
+
+.tile {
+  position: absolute; min-width: 78px; max-width: 150px; width: max-content;
+  padding: 5px 10px 6px 10px; border-radius: 12px; box-shadow: var(--shadow);
+  touch-action: none; user-select: none; transform: rotate(var(--rot,0deg));
+  color: rgba(0,0,0,0.8);
+}
+.tile-handle { display: flex; align-items: center; justify-content: center; margin-bottom: 1px; cursor: grab; touch-action: none; }
+.tile-dots { font-size: 9px; letter-spacing: 2px; color: rgba(0,0,0,0.32); }
+.tile-text { font-size: 13.5px; line-height: 1.3; font-weight: 600; outline: none; min-height: 18px; word-break: break-word; touch-action: manipulation; }
+.tile.dragging { box-shadow: 0 14px 26px rgba(0,0,0,0.28); z-index: 20; }
+.tile.over-trash { opacity: .45; }
+
+.trash-zone {
+  position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%) scale(.4);
+  width: 56px; height: 56px; border-radius: 50%; background: var(--rose); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 23px;
+  box-shadow: 0 8px 20px rgba(180,72,58,0.45); opacity: 0; pointer-events: none; z-index: 50;
+  transition: transform .18s cubic-bezier(.2,1.4,.4,1), opacity .18s ease, background .12s ease;
+}
+.trash-zone.show { opacity: 1; transform: translateX(-50%) scale(1); }
+.trash-zone.active { background: #7C261C; transform: translateX(-50%) scale(1.18); }
 
 /* ---------- Ustawienia ---------- */
 .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 2px; border-bottom: 1px dashed var(--line); }
@@ -619,47 +574,15 @@ html, body {
 .add-tag-row button { border: none; background: var(--sage); color: #fff; border-radius: 10px; padding: 0 14px; cursor: pointer; }
 
 /* ---------- Toasty ---------- */
-.toast-stack {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: min(92vw, 420px);
-  pointer-events: none;
-}
-.toast {
-  background: var(--ink);
-  color: var(--card);
-  border-radius: 12px;
-  padding: 11px 16px;
-  font-size: 13.5px;
-  box-shadow: var(--shadow);
-  animation: toastIn 0.2s ease;
-}
+.toast-stack { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; width: min(92vw, 420px); pointer-events: none; }
+.toast { background: var(--ink); color: var(--card); border-radius: 12px; padding: 11px 16px; font-size: 13.5px; box-shadow: var(--shadow); animation: toastIn 0.2s ease; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ---------- Modale ---------- */
-.modal-backdrop {
-  position: fixed; inset: 0; background: rgba(20,17,12,0.4);
-  display: flex; align-items: flex-end; justify-content: center;
-  z-index: 60; animation: fadeIn 0.15s ease;
-}
+.modal-backdrop { position: fixed; inset: 0; background: rgba(20,17,12,0.4); display: flex; align-items: flex-end; justify-content: center; z-index: 60; animation: fadeIn 0.15s ease; }
 @media (min-width: 560px) { .modal-backdrop { align-items: center; } }
 
-.modal-sheet {
-  background: var(--card);
-  width: 100%;
-  max-width: 480px;
-  max-height: 88vh;
-  overflow-y: auto;
-  border-radius: 22px 22px 0 0;
-  padding: 22px 22px calc(22px + env(safe-area-inset-bottom));
-  box-shadow: var(--shadow);
-}
+.modal-sheet { background: var(--card); width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; border-radius: 22px 22px 0 0; padding: 22px 22px calc(22px + env(safe-area-inset-bottom)); box-shadow: var(--shadow); }
 @media (min-width: 560px) { .modal-sheet { border-radius: 22px; max-height: 80vh; } }
 
 .modal-sheet h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 21px; margin: 0 0 14px; }
@@ -674,11 +597,12 @@ html, body {
 .color-opt { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
 .color-opt.active { border-color: var(--ink); }
 
+.swatches{ display:flex; gap: 10px; margin-bottom: 15px; }
+.swatch{ width: 40px; height: 40px; border-radius: 50%; border: 2px solid transparent; cursor:pointer; }
+.swatch:hover{ border-color: var(--ink); }
+
 .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
-.btn-primary, .btn-secondary {
-  flex: 1; border: none; border-radius: 12px; padding: 13px; font-size: 14.5px; font-weight: 500;
-  font-family: inherit; cursor: pointer; transition: opacity 0.15s;
-}
+.btn-primary, .btn-secondary { flex: 1; border: none; border-radius: 12px; padding: 13px; font-size: 14.5px; font-weight: 500; font-family: inherit; cursor: pointer; transition: opacity 0.15s; }
 .btn-primary { background: var(--sage); color: #fff; }
 .btn-danger { background: var(--rose); color: #fff; }
 .btn-secondary { background: var(--bg-soft); color: var(--ink); }
@@ -693,15 +617,7 @@ html, body {
 .search-hit { padding: 10px 4px; border-bottom: 1px dashed var(--line); cursor: pointer; font-size: 14px; }
 .search-hit .sub { font-size: 11.5px; color: var(--ink-faint); }
 
-/* ---------- Dostępność / focus ---------- */
-button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid var(--sage);
-  outline-offset: 2px;
-}
+button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) { .item { animation: none; } }
-
-@media (max-width: 400px) {
-  #view-title { font-size: 24px; }
-  .receipt { padding: 16px 14px 20px; }
-}
+@media (max-width: 400px) { #view-title { font-size: 24px; } .receipt { padding: 16px 14px 20px; } }
