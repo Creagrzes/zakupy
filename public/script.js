@@ -1,9 +1,5 @@
 // =====================================================================
 // Zakupy — klient SPA
-// Cała logika UI + połączenie WebSocket z Durable Object po stronie
-// serwera. Stan trzymamy w jednym obiekcie `state`, serwer jest źródłem
-// prawdy — każda akcja jest wysyłana do serwera, a on odsyła zaktualizowany
-// stan do WSZYSTKICH podłączonych klientów (dlatego działa realtime).
 // =====================================================================
 
 const NAME_KEY = 'lz_name';
@@ -21,6 +17,7 @@ const state = {
   categories: [],
   templates: [],
   favorites: {},
+  notes: [], // NOWE
   route: { name: 'home', id: null },
   filterShop: 'all',
   groupByCategory: false,
@@ -125,6 +122,7 @@ function handleServerMessage(msg) {
     state.categories = msg.categories;
     state.templates = msg.templates;
     state.favorites = msg.favorites;
+    state.notes = msg.notes;
     renderRoute();
   } else if (msg.type === 'state') {
     state[msg.slice] = msg.data;
@@ -146,8 +144,6 @@ function handleServerMessage(msg) {
     if (msg.by !== state.myName) showToast(msg.text);
   }
 }
-
-// ---- Wysyłanie akcji + kolejka offline ----
 
 function sendAction(action, payload) {
   const cid = Math.random().toString(36).slice(2);
@@ -193,8 +189,8 @@ function parseHashAndRender() {
 
 function renderRoute() {
   const r = state.route;
-  backBtn.classList.toggle('hidden', r.name === 'home' || r.name === 'templates' || r.name === 'stats' || r.name === 'archive');
-  bottomNav.classList.toggle('hidden', r.name === 'list');
+  backBtn.classList.toggle('hidden', r.name === 'home' || r.name === 'templates' || r.name === 'stats' || r.name === 'archive' || r.name === 'notes');
+  bottomNav.classList.toggle('hidden', r.name === 'list' || r.name === 'note');
 
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.route === r.name);
@@ -205,15 +201,11 @@ function renderRoute() {
   else if (r.name === 'stats') { viewEyebrow.textContent = 'na oko'; viewTitle.textContent = 'Statystyki'; renderStats(); }
   else if (r.name === 'archive') { viewEyebrow.textContent = 'dawne zakupy'; viewTitle.textContent = 'Archiwum'; renderArchive(); }
   else if (r.name === 'list') { renderListView(r.id); }
+  else if (r.name === 'notes') { viewEyebrow.textContent = 'twoje zapiski'; viewTitle.textContent = 'Notatnik'; renderNotesList(); }
+  else if (r.name === 'note') { renderNoteEditor(r.id); }
 }
 
-// ---------------------------------------------------------------------
-// Pomocnicze
-// ---------------------------------------------------------------------
-
-function esc(s) {
-  return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
+function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function timeAgo(ts) {
   const diff = Date.now() - ts;
@@ -244,11 +236,11 @@ function applyTheme(theme) {
 function activeLists() { return state.lists.filter((l) => !l.archived).sort((a, b) => (b.pinned - a.pinned) || (b.updatedAt - a.updatedAt)); }
 function archivedLists() { return state.lists.filter((l) => l.archived).sort((a, b) => b.updatedAt - a.updatedAt); }
 
-const ICONS = ['🛒', '🏠', '🚗', '🎁', '🐶', '🔧', '🎉', '💼', '✈️', '🌱'];
+const ICONS = ['🛒', '🏠', '🚗', '🎁', '🐶', '🔧', '🎉', '💼', '✈️', '🌱', '📝'];
 const COLORS = ['#7f8c6a', '#b17263', '#7590a8', '#c9a24b', '#8a6bb3', '#5c8c7f', '#c2745e'];
 
 // =====================================================================
-// EKRAN GŁÓWNY
+// EKRAN GŁÓWNY (Listy)
 // =====================================================================
 
 function renderHome() {
@@ -482,28 +474,19 @@ function wireListView(listId, allItems) {
   const listEl = document.getElementById('list');
   const addShopSelect = document.getElementById('add-shop');
 
-  addShopSelect.addEventListener('change', () => {
-    state.activeAddShop = addShopSelect.value;
-  });
+  addShopSelect.addEventListener('change', () => { state.activeAddShop = addShopSelect.value; });
 
   addForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const val = addInput.value.trim();
     if (!val) return;
 
-    // NOWE: Sprawdzanie duplikatów (ignoruje wielkość liter)
     const valLower = val.toLowerCase();
     const exists = allItems.some(i => i.name.trim().toLowerCase() === valLower);
-    if (exists) {
-      showToast('⚠️ Nie możesz dodać. Ten produkt już jest na liście!');
-      return;
-    }
+    if (exists) { showToast('⚠️ Nie możesz dodać. Ten produkt już jest na liście!'); return; }
 
-    // Wysyłamy akcję dodania produktu RAZEM z wybranym sklepem
     sendAction('addItems', { listId, names: [val], shop: addShopSelect.value });
-    addInput.value = '';
-    suggestBox.innerHTML = '';
-    addInput.focus();
+    addInput.value = ''; suggestBox.innerHTML = ''; addInput.focus();
   });
 
   addInput.addEventListener('input', () => {
@@ -516,7 +499,6 @@ function wireListView(listId, allItems) {
     suggestBox.innerHTML = hits.length ? `<div class="suggest-box">${hits.map((h) => `<div class="suggest-item" data-name="${esc(h.name)}">${esc(h.name)}</div>`).join('')}</div>` : '';
     suggestBox.querySelectorAll('.suggest-item').forEach((el) => {
       el.addEventListener('click', () => {
-        // Zabezpieczenie przed duplikatem również przy dodawaniu z podpowiedzi
         const selectedVal = el.dataset.name.toLowerCase();
         const exists = allItems.some(i => i.name.trim().toLowerCase() === selectedVal);
         if (exists) {
@@ -641,16 +623,11 @@ function openSaveTemplateModal(listId) {
 }
 
 function openBulkShopModal(listId, allItems) {
-  // Wybieramy tylko produkty, które nie mają sklepu i nie są kupione
   const noShopItems = allItems.filter(i => !i.shop && !i.done);
-  
-  if (noShopItems.length === 0) {
-    showToast('Wszystkie produkty na liście mają już przypisany sklep (lub są odhaczone).');
-    return;
-  }
+  if (noShopItems.length === 0) { showToast('Wszystkie produkty na liście mają już przypisany sklep (lub są odhaczone).'); return; }
 
   openModal(`
-    <h2>Przypisz sklep do produktów</h2>
+    <h2>Przypisz sklep</h2>
     <p class="welcome-sub">Wybierz sklep i zaznacz produkty, którym chcesz go nadać.</p>
     <div class="field">
       <select class="text-input" id="bulk-shop">
@@ -675,13 +652,10 @@ function openBulkShopModal(listId, allItems) {
     root.querySelector('#bulk-save').onclick = () => {
       const shop = root.querySelector('#bulk-shop').value;
       if (!shop) { showToast('Wybierz sklep z listy!'); return; }
-      
       const checkedIds = [...root.querySelectorAll('.bulk-list input:checked')].map(el => el.value);
       if (checkedIds.length === 0) { showToast('Zaznacz co najmniej jeden produkt!'); return; }
-      
       sendAction('updateItemsShop', { listId, itemIds: checkedIds, shop });
-      closeModal();
-      showToast(`Przypisano sklep do ${checkedIds.length} produktów.`);
+      closeModal(); showToast(`Przypisano sklep do ${checkedIds.length} produktów.`);
     };
   });
 }
@@ -710,56 +684,253 @@ function renderTemplates() {
   }
   
   html += `<button type="button" class="fab" id="new-template-fab" aria-label="Nowy szablon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
-  
   viewEl.innerHTML = html;
   
   viewEl.querySelectorAll('[data-use]').forEach((btn) => btn.addEventListener('click', () => {
     const t = templates.find((x) => x.id === btn.dataset.use);
     sendAction('createList', { name: t.name, templateId: t.id, icon: '🛒', color: COLORS[0] });
-    showToast('Utworzono listę z szablonu');
-    location.hash = '#home';
+    showToast('Utworzono listę z szablonu'); location.hash = '#home';
   }));
-  
   viewEl.querySelectorAll('[data-del]').forEach((btn) => btn.addEventListener('click', () => {
     if (confirm('Usunąć ten szablon?')) sendAction('deleteTemplate', { id: btn.dataset.del });
   }));
-
   document.getElementById('new-template-fab').addEventListener('click', openNewTemplateModal);
 }
 
 function openNewTemplateModal() {
   openModal(`
     <h2>Nowy szablon</h2>
-    <div class="field">
-      <label>Nazwa szablonu</label>
-      <input class="text-input" id="tpl-name" placeholder="np. Przepis na lasagne" maxlength="60">
-    </div>
-    <div class="field">
-      <label>Produkty (każdy w nowej linii)</label>
-      <textarea class="text-input textarea-input" id="tpl-items" rows="6" placeholder="Makaron\nMięso mielone\nSos pomidorowy\nSer"></textarea>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn-secondary" id="tpl-cancel">Anuluj</button>
-      <button type="button" class="btn-primary" id="tpl-save">Zapisz szablon</button>
-    </div>
+    <div class="field"><label>Nazwa szablonu</label><input class="text-input" id="tpl-name" placeholder="np. Przepis na lasagne" maxlength="60"></div>
+    <div class="field"><label>Produkty (każdy w nowej linii)</label><textarea class="text-input textarea-input" id="tpl-items" rows="6" placeholder="Makaron\nMięso mielone\nSos pomidorowy\nSer"></textarea></div>
+    <div class="modal-actions"><button type="button" class="btn-secondary" id="tpl-cancel">Anuluj</button><button type="button" class="btn-primary" id="tpl-save">Zapisz szablon</button></div>
   `, (root) => {
     root.querySelector('#tpl-cancel').onclick = closeModal;
     root.querySelector('#tpl-save').onclick = () => {
       const name = root.querySelector('#tpl-name').value.trim();
       const itemsText = root.querySelector('#tpl-items').value;
       const items = itemsText.split('\n').filter(i => i.trim() !== '');
-      
       if (!name) { showToast('Podaj nazwę szablonu!'); return; }
-      
-      sendAction('createTemplate', { name, items });
-      closeModal();
-      showToast('Utworzono nowy szablon');
+      sendAction('createTemplate', { name, items }); closeModal(); showToast('Utworzono nowy szablon');
     };
   });
 }
 
 // =====================================================================
-// ARCHIWUM
+// NOTATNIK
+// =====================================================================
+
+function renderNotesList() {
+  const notes = [...state.notes].sort((a,b) => b.updatedAt - a.updatedAt);
+  let html = '';
+  
+  if (!notes.length) {
+    html = `<div class="empty-state"><p>Brak notatek.</p><p class="empty-sub">Stwórz nową przyciskiem poniżej.</p></div>`;
+  } else {
+    html = notes.map((n) => `
+      <div class="plain-card" style="cursor:pointer;" data-open-note="${n.id}">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div>
+             <p class="plain-card-title">${n.linkedListId ? '🛒 ' : ''}${esc(n.title)}</p>
+             <p class="plain-card-sub">Ostatnia zmiana: ${timeAgo(n.updatedAt)}</p>
+          </div>
+          <button type="button" class="del-btn" data-del-note="${n.id}" aria-label="Usuń" style="margin-top:-6px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  html += `<button type="button" class="fab" id="new-note-fab" aria-label="Nowa notatka"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
+  viewEl.innerHTML = html;
+
+  viewEl.querySelectorAll('[data-open-note]').forEach((card) => {
+    card.addEventListener('click', (e) => {
+      if(e.target.closest('[data-del-note]')) return;
+      location.hash = '#note/' + card.dataset.openNote;
+    });
+  });
+  viewEl.querySelectorAll('[data-del-note]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if(confirm('Usunąć notatkę na stałe?')) sendAction('deleteNote', { id: btn.dataset.delNote });
+    });
+  });
+  document.getElementById('new-note-fab').addEventListener('click', openNewNoteModal);
+}
+
+function openNewNoteModal() {
+  openModal(`
+    <h2>Nowa notatka</h2>
+    <div class="field"><input class="text-input" id="nn-title" placeholder="Tytuł notatki" maxlength="60"></div>
+    <div class="toggle-row">
+      <div class="toggle-row-text">
+        <span class="toggle-label">🛒 Lista zakupów</span>
+        <span class="toggle-hint">Z automatu przeniesie wypunktowania na listę</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="nn-shopping">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </label>
+    </div>
+    <div class="modal-actions"><button type="button" class="btn-secondary" id="nn-cancel">Anuluj</button><button type="button" class="btn-primary" id="nn-save">Utwórz</button></div>
+  `, (root) => {
+    root.querySelector('#nn-cancel').onclick = closeModal;
+    root.querySelector('#nn-save').onclick = () => {
+      const title = root.querySelector('#nn-title').value.trim() || 'Bez tytułu';
+      const isShopping = root.querySelector('#nn-shopping').checked;
+      
+      const newNoteId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+      let linkedListId = null;
+
+      if(isShopping) {
+         linkedListId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+         sendAction('createList', { id: linkedListId, name: title, icon: '📝', color: COLORS[4] });
+      }
+
+      sendAction('createNote', { id: newNoteId, title, linkedListId });
+      closeModal();
+      location.hash = '#note/' + newNoteId;
+    };
+  });
+}
+
+function renderNoteEditor(id) {
+  const note = state.notes.find(n => n.id === id);
+  if (!note) { viewEl.innerHTML = `<div class="empty-state"><p>Notatka nie istnieje.</p></div>`; return; }
+
+  viewEyebrow.textContent = note.linkedListId ? 'notatka powiązana z listą' : 'edytor';
+  viewTitle.textContent = ''; // Ukrywamy standardowy tytuł, damy inputa
+
+  viewEl.innerHTML = `
+    <div class="note-top-bar">
+      <input id="note-title-input" class="text-input" value="${esc(note.title)}" placeholder="Bez tytułu" style="font-size: 20px; font-weight: bold; border-color: transparent; background: transparent; padding: 0;">
+    </div>
+    <div id="canvas-wrap" class="note-canvas-wrap">
+      <div id="canvas" class="note-canvas">
+        <div id="text-editor" contenteditable="true" data-placeholder="Zacznij pisać...">${note.body}</div>
+      </div>
+    </div>
+    <div id="trash-zone" class="trash-zone">🗑</div>
+    <div id="note-toolbar" class="note-toolbar">
+      <button type="button" class="tool-btn" id="btn-bold"><b>B</b></button>
+      <button type="button" class="tool-btn" id="btn-italic"><i>I</i></button>
+      <button type="button" class="tool-btn" id="btn-list">≡• Lista</button>
+      <button type="button" class="tool-btn active" id="btn-tile" style="margin-left: auto;">+ Kafelek</button>
+    </div>
+  `;
+
+  const titleInp = document.getElementById('note-title-input');
+  const editor = document.getElementById('text-editor');
+  const canvas = document.getElementById('canvas');
+
+  // Odtwarzamy kafelki
+  note.tiles.forEach(t => createTileEl(t, canvas));
+
+  let saveTimeout;
+  function scheduleSave() {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      const tiles = Array.from(canvas.querySelectorAll('.tile')).map(t => ({
+        id: t.dataset.id,
+        x: parseFloat(t.style.left),
+        y: parseFloat(t.style.top),
+        color: t.style.background,
+        text: t.querySelector('.tile-text').innerHTML
+      }));
+      sendAction('updateNote', { id, patch: { title: titleInp.value, body: editor.innerHTML, tiles }});
+    }, 600);
+  }
+
+  titleInp.addEventListener('input', scheduleSave);
+  editor.addEventListener('input', scheduleSave);
+
+  document.getElementById('btn-bold').addEventListener('click', () => { editor.focus(); document.execCommand('bold'); scheduleSave(); });
+  document.getElementById('btn-italic').addEventListener('click', () => { editor.focus(); document.execCommand('italic'); scheduleSave(); });
+  document.getElementById('btn-list').addEventListener('click', () => { editor.focus(); document.execCommand('insertUnorderedList'); scheduleSave(); });
+
+  document.getElementById('btn-tile').addEventListener('click', () => {
+    openModal(`
+      <h2>Wybierz kolor kafelka</h2>
+      <div class="swatches">
+        <div class="swatch" data-color="#EFC160" style="background:#EFC160"></div>
+        <div class="swatch" data-color="#EB8574" style="background:#EB8574"></div>
+        <div class="swatch" data-color="#7BB3D4" style="background:#7BB3D4"></div>
+        <div class="swatch" data-color="#B79BDB" style="background:#B79BDB"></div>
+        <div class="swatch" data-color="#8BC7A4" style="background:#8BC7A4"></div>
+      </div>
+    `, (root) => {
+      root.querySelectorAll('.swatch').forEach(sw => sw.onclick = () => {
+        const newTile = { id: 't-'+Date.now(), x: 20 + Math.random()*20, y: 150 + Math.random()*20, color: sw.dataset.color, text: '' };
+        createTileEl(newTile, canvas);
+        scheduleSave();
+        closeModal();
+      });
+    }, false);
+  });
+
+  // Mechanika kafelków (drag & drop w przestrzeni przeglądarki)
+  function createTileEl(data, container) {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.dataset.id = data.id;
+    tile.style.background = data.color;
+    tile.style.setProperty('--rot', (Math.random()*6 - 3).toFixed(1) + 'deg');
+    tile.style.left = data.x + 'px';
+    tile.style.top  = data.y + 'px';
+    tile.innerHTML = `<div class="tile-handle"><span class="tile-dots">⋮⋮</span></div><div class="tile-text" contenteditable="true" data-placeholder="Napisz...">${data.text}</div>`;
+    container.appendChild(tile);
+
+    tile.querySelector('.tile-text').addEventListener('input', scheduleSave);
+    makeTileDraggable(tile, container);
+  }
+
+  function makeTileDraggable(tile, container) {
+    const handle = tile.querySelector('.tile-handle');
+    const trashZone = document.getElementById('trash-zone');
+    let startX=0, startY=0, origLeft=0, origTop=0, dragging=false;
+    let longPressTimer, trashArmed = false, overTrash = false;
+
+    handle.addEventListener('pointerdown', (e) => {
+      dragging = true; trashArmed = false; overTrash = false;
+      tile.classList.add('dragging'); handle.setPointerCapture(e.pointerId);
+      startX = e.clientX; startY = e.clientY;
+      origLeft = parseFloat(tile.style.left); origTop = parseFloat(tile.style.top);
+      document.body.style.overflow = 'hidden';
+      
+      longPressTimer = setTimeout(() => {
+        trashArmed = true; trashZone.classList.add('show');
+        if(navigator.vibrate) navigator.vibrate(15);
+      }, 400);
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if(!dragging) return;
+      let newLeft = origLeft + (e.clientX - startX);
+      let newTop  = origTop + (e.clientY - startY);
+      tile.style.left = Math.max(0, newLeft) + 'px';
+      tile.style.top  = Math.max(0, newTop) + 'px';
+
+      if(trashArmed) {
+        const r = trashZone.getBoundingClientRect();
+        const inside = e.clientX >= r.left-10 && e.clientX <= r.right+10 && e.clientY >= r.top-10 && e.clientY <= r.bottom+10;
+        if(inside !== overTrash) { overTrash = inside; trashZone.classList.toggle('active', overTrash); tile.classList.toggle('over-trash', overTrash); }
+      }
+    });
+
+    function endDrag() {
+      clearTimeout(longPressTimer);
+      if(!dragging) return;
+      dragging = false; tile.classList.remove('dragging'); document.body.style.overflow = '';
+      trashZone.classList.remove('show', 'active');
+
+      if(trashArmed && overTrash) { tile.remove(); scheduleSave(); return; }
+      tile.classList.remove('over-trash'); scheduleSave();
+    }
+    handle.addEventListener('pointerup', endDrag); handle.addEventListener('pointercancel', endDrag);
+  }
+}
+
+// =====================================================================
+// ARCHIWUM I STATYSTYKI
 // =====================================================================
 
 function renderArchive() {
@@ -786,19 +957,13 @@ function renderArchive() {
   viewEl.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { if (confirm('Usunąć na stałe?')) sendAction('deleteList', { id: b.dataset.del }); }));
 }
 
-// =====================================================================
-// STATYSTYKI
-// =====================================================================
-
 function renderStats() {
   const allItems = Object.values(state.itemsByList).flat();
   const doneItems = allItems.filter((i) => i.done);
   const archivedCount = state.lists.filter((l) => l.archived).length;
-
   const shopFreq = {};
   for (const it of allItems) if (it.shop) shopFreq[it.shop] = (shopFreq[it.shop] || 0) + 1;
   const topShops = Object.entries(shopFreq).sort((a, b) => b[1] - a[1]).slice(0, 6);
-
   const topProducts = Object.values(state.favorites).sort((a, b) => b.count - a.count).slice(0, 8);
 
   viewEl.innerHTML = `
@@ -823,14 +988,12 @@ function openSettingsModal() {
   const theme = document.documentElement.getAttribute('data-theme') || 'light';
   openModal(`
     <h2>Ustawienia</h2>
-    
     <div class="settings-row" style="display:flex; gap:10px;">
       <button type="button" class="btn-secondary" id="go-stats" style="flex:1;">📊 Statystyki</button>
       <button type="button" class="btn-secondary" id="go-archive" style="flex:1;">📦 Archiwum</button>
     </div>
-
     <div class="settings-row">
-      <div><p class="settings-label">Kto robi zakupy</p><p class="settings-sub">Zmiana imienia widocznego przy dodanych produktach</p></div>
+      <div><p class="settings-label">Kto robi zakupy</p><p class="settings-sub">Zmiana imienia</p></div>
       <div class="segmented" id="s-user">
         <button data-v="Grzegorz" class="${state.myName === 'Grzegorz' ? 'active' : ''}">Grzegorz</button>
         <button data-v="Ola" class="${state.myName === 'Ola' ? 'active' : ''}">Ola</button>
@@ -853,83 +1016,46 @@ function openSettingsModal() {
       <div class="tag-list" id="s-units">${state.units.map((u) => `<span class="tag-pill">${esc(u)}<button data-del-unit="${esc(u)}">×</button></span>`).join('')}</div>
       <div class="add-tag-row"><input class="text-input" id="s-new-unit" placeholder="Dodaj jednostkę…" maxlength="20"><button id="s-add-unit">Dodaj</button></div>
     </div>
-    <div class="modal-actions">
-      <button type="button" class="btn-secondary" id="s-clear">Wyczyść dane lokalne</button>
-      <button type="button" class="btn-primary" id="s-close">Zamknij</button>
-    </div>
+    <div class="modal-actions"><button type="button" class="btn-secondary" id="s-clear">Wyczyść dane lokalne</button><button type="button" class="btn-primary" id="s-close">Zamknij</button></div>
   `, (root) => {
     root.querySelector('#go-stats').onclick = () => { closeModal(); location.hash = '#stats'; };
     root.querySelector('#go-archive').onclick = () => { closeModal(); location.hash = '#archive'; };
-    
-    root.querySelector('#s-user').addEventListener('click', (e) => {
-      const btn = e.target.closest('button'); if (!btn) return;
-      state.myName = btn.dataset.v; localStorage.setItem(NAME_KEY, state.myName);
-      root.querySelectorAll('#s-user button').forEach((b) => b.classList.toggle('active', b === btn));
-    });
-    root.querySelector('#s-theme').addEventListener('click', (e) => {
-      const btn = e.target.closest('button'); if (!btn) return;
-      applyTheme(btn.dataset.v);
-      root.querySelectorAll('#s-theme button').forEach((b) => b.classList.toggle('active', b === btn));
-    });
-    root.querySelector('#s-add-shop').onclick = () => {
-      const input = root.querySelector('#s-new-shop'); const v = input.value.trim();
-      if (v) { sendAction('addShop', { name: v }); input.value = ''; }
-    };
-    root.querySelector('#s-add-unit').onclick = () => {
-      const input = root.querySelector('#s-new-unit'); const v = input.value.trim();
-      if (v) { sendAction('addUnit', { name: v }); input.value = ''; }
-    };
+    root.querySelector('#s-user').addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; state.myName = btn.dataset.v; localStorage.setItem(NAME_KEY, state.myName); root.querySelectorAll('#s-user button').forEach((b) => b.classList.toggle('active', b === btn)); });
+    root.querySelector('#s-theme').addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; applyTheme(btn.dataset.v); root.querySelectorAll('#s-theme button').forEach((b) => b.classList.toggle('active', b === btn)); });
+    root.querySelector('#s-add-shop').onclick = () => { const input = root.querySelector('#s-new-shop'); const v = input.value.trim(); if (v) { sendAction('addShop', { name: v }); input.value = ''; } };
+    root.querySelector('#s-add-unit').onclick = () => { const input = root.querySelector('#s-new-unit'); const v = input.value.trim(); if (v) { sendAction('addUnit', { name: v }); input.value = ''; } };
     root.querySelectorAll('[data-del-shop]').forEach((b) => b.addEventListener('click', () => sendAction('deleteShop', { name: b.dataset.delShop })));
     root.querySelectorAll('[data-del-unit]').forEach((b) => b.addEventListener('click', () => sendAction('deleteUnit', { name: b.dataset.delUnit })));
-    root.querySelector('#s-clear').onclick = () => {
-      if (confirm('To wyczyści tylko dane zapisane w tej przeglądarce (imię, motyw, kolejkę offline) — nie usunie list na serwerze. Kontynuować?')) {
-        localStorage.removeItem(NAME_KEY); localStorage.removeItem(THEME_KEY); localStorage.removeItem(QUEUE_KEY);
-        location.reload();
-      }
-    };
+    root.querySelector('#s-clear').onclick = () => { if (confirm('Usunąć dane zapisane w tej przeglądarce?')) { localStorage.removeItem(NAME_KEY); localStorage.removeItem(THEME_KEY); localStorage.removeItem(QUEUE_KEY); location.reload(); } };
     root.querySelector('#s-close').onclick = closeModal;
   }, true);
 }
 
 // =====================================================================
-// WYSZUKIWANIE (modal)
+// WYSZUKIWANIE
 // =====================================================================
 
 function openSearchModal() {
-  openModal(`
-    <div class="search-input-wrap"><input class="text-input" id="q-input" placeholder="Szukaj list, produktów, sklepów…" autofocus></div>
-    <div id="q-results"></div>
-  `, (root) => {
-    const input = root.querySelector('#q-input');
-    const results = root.querySelector('#q-results');
-    input.addEventListener('input', () => renderSearchResults(input.value.trim().toLowerCase(), results));
-    setTimeout(() => input.focus(), 50);
+  openModal(`<div class="search-input-wrap"><input class="text-input" id="q-input" placeholder="Szukaj…" autofocus></div><div id="q-results"></div>`, (root) => {
+    const input = root.querySelector('#q-input'); const results = root.querySelector('#q-results');
+    input.addEventListener('input', () => renderSearchResults(input.value.trim().toLowerCase(), results)); setTimeout(() => input.focus(), 50);
   }, true);
 }
 
 function renderSearchResults(q, root) {
   if (!q) { root.innerHTML = ''; return; }
-  const listHits = state.lists.filter((l) => l.name.toLowerCase().includes(q) || (l.description || '').toLowerCase().includes(q));
+  const listHits = state.lists.filter((l) => l.name.toLowerCase().includes(q));
   const itemHits = [];
   for (const [listId, items] of Object.entries(state.itemsByList)) {
-    const list = state.lists.find((l) => l.id === listId);
-    if (!list) continue;
+    const list = state.lists.find((l) => l.id === listId); if (!list) continue;
     for (const it of items) if (it.name.toLowerCase().includes(q)) itemHits.push({ it, list });
   }
-  const shopHits = state.shops.filter((s) => s.toLowerCase().includes(q));
-
   let html = '';
   if (listHits.length) html += `<div class="search-result-group"><h3>Listy</h3>${listHits.map((l) => `<div class="search-hit" data-list="${l.id}">${l.icon} ${esc(l.name)}</div>`).join('')}</div>`;
   if (itemHits.length) html += `<div class="search-result-group"><h3>Produkty</h3>${itemHits.slice(0, 20).map((h) => `<div class="search-hit" data-list="${h.list.id}">${esc(h.it.name)}<div class="sub">w liście „${esc(h.list.name)}”</div></div>`).join('')}</div>`;
-  if (shopHits.length) html += `<div class="search-result-group"><h3>Sklepy</h3>${shopHits.map((s) => `<div class="search-hit">${esc(s)}</div>`).join('')}</div>`;
-  if (!html) html = '<p class="welcome-sub">Brak wyników.</p>';
-  root.innerHTML = html;
+  root.innerHTML = html || '<p class="welcome-sub">Brak wyników.</p>';
   root.querySelectorAll('[data-list]').forEach((el) => el.addEventListener('click', () => { closeModal(); location.hash = '#list/' + el.dataset.list; }));
 }
-
-// =====================================================================
-// Modal generyczny
-// =====================================================================
 
 function openModal(innerHtml, onMount, tall) {
   modalRoot.innerHTML = `<div class="modal-backdrop" id="modal-backdrop"><div class="modal-sheet">${innerHtml}</div></div>`;
@@ -937,5 +1063,4 @@ function openModal(innerHtml, onMount, tall) {
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
   if (onMount) onMount(modalRoot);
 }
-
 function closeModal() { modalRoot.innerHTML = ''; }
