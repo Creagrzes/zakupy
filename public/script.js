@@ -828,6 +828,8 @@ function renderNoteEditor(id) {
       <button type="button" class="tool-btn" id="btn-bold"><b>B</b></button>
       <button type="button" class="tool-btn" id="btn-italic"><i>I</i></button>
       <button type="button" class="tool-btn" id="btn-list">≡• Lista</button>
+      <button type="button" class="tool-btn" id="btn-font-minus">A-</button>
+      <button type="button" class="tool-btn" id="btn-font-plus">A+</button>
       <button type="button" class="tool-btn active" id="btn-tile" style="margin-left: auto;">+ Kafelek</button>
     </div>
   `;
@@ -860,6 +862,8 @@ function renderNoteEditor(id) {
   document.getElementById('btn-bold').addEventListener('click', () => { editor.focus(); document.execCommand('bold'); scheduleSave(); });
   document.getElementById('btn-italic').addEventListener('click', () => { editor.focus(); document.execCommand('italic'); scheduleSave(); });
   document.getElementById('btn-list').addEventListener('click', () => { editor.focus(); document.execCommand('insertUnorderedList'); scheduleSave(); });
+  document.getElementById('btn-font-plus').addEventListener('click', () => { editor.focus(); document.execCommand('fontSize', false, '5'); scheduleSave(); });
+  document.getElementById('btn-font-minus').addEventListener('click', () => { editor.focus(); document.execCommand('fontSize', false, '3'); scheduleSave(); });
 
   document.getElementById('btn-tile').addEventListener('click', () => {
     openModal(`
