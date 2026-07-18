@@ -797,6 +797,20 @@ function renderNoteEditor(id) {
   const note = state.notes.find(n => n.id === id);
   if (!note) { viewEl.innerHTML = `<div class="empty-state"><p>Notatka nie istnieje.</p></div>`; return; }
 
+
+    // --- DODAJ TEN FRAGMENT TUTAJ ---
+  const currentTitle = document.getElementById('note-title-input');
+  const currentEditor = document.getElementById('text-editor');
+  
+  if (currentTitle && currentEditor && viewEl.dataset.activeNoteId === id) {
+    // Aktualizujemy zawartość tylko jeśli akurat nie mamy tam wciśniętego kursora
+    if (document.activeElement !== currentTitle) currentTitle.value = note.title;
+    if (document.activeElement !== currentEditor) currentEditor.innerHTML = note.body;
+    return; // Przerywamy dalsze budowanie widoku, by chronić klawiaturę!
+  }
+  viewEl.dataset.activeNoteId = id; // Zapamiętujemy ID aktualnie wyświetlanej notatki
+  // --- KONIEC FRAGMENTU ---
+
   viewEyebrow.textContent = note.linkedListId ? 'notatka powiązana z listą' : 'edytor';
   viewTitle.textContent = ''; // Ukrywamy standardowy tytuł, damy inputa
 
