@@ -393,6 +393,23 @@ export class ListRoom {
     this.broadcast({ type: 'state', slice: 'templates', data: this.templates });
   }
 
+  async act_createTemplate(p, by) {
+    const items = (p.items || []).map(name => ({
+      name: name.trim(), qty: 1, unit: 'szt.', shop: '', category: '', note: ''
+    })).filter(x => x.name);
+
+    const tpl = {
+      id: uid(),
+      name: (p.name || 'Nowy szablon').toString().slice(0, 60),
+      items,
+      createdAt: now()
+    };
+    this.templates.unshift(tpl);
+    await this.persist(['templates']);
+    this.broadcast({ type: 'state', slice: 'templates', data: this.templates });
+    this.event(by, `${by} utworzył(a) szablon "${tpl.name}"`);
+  }
+
   // -------------------------------------------------------------
   // Akcje: PRODUKTY
   // -------------------------------------------------------------
@@ -450,6 +467,28 @@ export class ListRoom {
     this.broadcastLists();
     this.broadcastListDetail(p.listId);
     this.broadcastItemsAll();
+  }
+
+  async act_updateItemsShop(p, by) {
+    const items = this.items[p.listId];
+    if (!items || !p.itemIds || !p.itemIds.length) return;
+    
+    let count = 0;
+    for (const it of items) {
+      if (p.itemIds.includes(it.id)) {
+        it.shop = p.shop || '';
+        count++;
+      }
+    }
+    
+    if (count > 0) {
+      this.touchList(p.listId, by);
+      this.pushHistory(p.listId, by, `${by} przypisał(a) sklep "${p.shop}" do ${count} produktów`);
+      await this.persist(['lists', 'items', 'history']);
+      this.broadcastLists();
+      this.broadcastListDetail(p.listId);
+      this.broadcastItemsAll();
+    }
   }
 
   async act_toggleItem(p, by) {
