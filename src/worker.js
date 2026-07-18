@@ -558,7 +558,7 @@ export class ListRoom {
     const note = {
       id,
       title: p.title || 'Bez tytułu',
-      body: p.linkedListId ? '<ul><li><br></li></ul>' : '',
+      body: '',
       tiles: [],
       linkedListId: p.linkedListId || null,
       updatedAt: now()
