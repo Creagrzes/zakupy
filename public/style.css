@@ -415,6 +415,12 @@ html, body {
 }
 #add-input:focus, .text-input:focus, .textarea-input:focus { border-color: var(--sage); }
 
+.textarea-input {
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+
 .add-form button {
   border: none;
   background: var(--sage);
@@ -678,8 +684,8 @@ html, body {
 .btn-secondary { background: var(--bg-soft); color: var(--ink); }
 .btn-primary:hover, .btn-secondary:hover, .btn-danger:hover { opacity: 0.88; }
 
-.check-row { display: flex; align-items: center; gap: 10px; padding: 9px 2px; }
-.check-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--sage); }
+.check-row { display: flex; align-items: center; gap: 10px; padding: 9px 2px; cursor: pointer; }
+.check-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--sage); cursor: pointer; }
 
 .search-input-wrap { margin-bottom: 14px; }
 .search-result-group { margin-bottom: 16px; }
