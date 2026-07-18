@@ -1,15 +1,5 @@
 // =====================================================================
 // Zakupy — Worker + Durable Object "ListRoom"
-// -----------------------------------------------------------------
-// worker.js robi trzy rzeczy:
-// 1. /ws          -> przekazuje żądanie do Durable Object (WebSocket, realtime)
-// 2. /api/export  -> zwraca cały stan jako JSON (przydatne do backupu)
-// 3. wszystko inne -> serwuje pliki statyczne z /public przez ASSETS
-//
-// Cała logika (listy, produkty, sklepy, jednostki, szablony, historia,
-// ulubione, statystyki) mieszka w Durable Object ListRoom poniżej.
-// Używamy JEDNEGO obiektu (singleton "main"), bo appka jest tylko dla
-// dwóch osób i mają widzieć dokładnie ten sam stan.
 // =====================================================================
 
 const ROOM_NAME = 'main';
@@ -27,10 +17,6 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
-
-// ---------------------------------------------------------------------
-// Domyślne dane
-// ---------------------------------------------------------------------
 
 const DEFAULT_SHOPS = [
   'Lidl', 'Biedronka', 'Rossmann', 'Kaufland', 'Auchan', 'Carrefour', 'Dino',
@@ -70,10 +56,6 @@ function now() {
   return Date.now();
 }
 
-// ---------------------------------------------------------------------
-// Durable Object
-// ---------------------------------------------------------------------
-
 export class ListRoom {
   constructor(state, env) {
     this.state = state;
@@ -84,30 +66,27 @@ export class ListRoom {
 
   async load() {
     const stored = await this.state.storage.get([
-      'lists', 'items', 'shops', 'units', 'templates', 'favorites', 'history'
+      'lists', 'items', 'shops', 'units', 'templates', 'favorites', 'history', 'notes'
     ]);
     this.lists = stored.get('lists') || [];
-    this.items = stored.get('items') || {};       // { listId: [item, ...] }
+    this.items = stored.get('items') || {};       
     this.shops = stored.get('shops') || DEFAULT_SHOPS.slice();
     this.units = stored.get('units') || DEFAULT_UNITS.slice();
     this.templates = stored.get('templates') || [];
-    this.favorites = stored.get('favorites') || {}; // { nameLower: {name, count} }
-    this.history = stored.get('history') || {};     // { listId: [entry, ...] }
+    this.favorites = stored.get('favorites') || {}; 
+    this.history = stored.get('history') || {};     
+    this.notes = stored.get('notes') || []; // NOWE
   }
 
   async persist(keys) {
     const map = {
       lists: this.lists, items: this.items, shops: this.shops, units: this.units,
-      templates: this.templates, favorites: this.favorites, history: this.history
+      templates: this.templates, favorites: this.favorites, history: this.history, notes: this.notes
     };
     const toSave = {};
     for (const k of keys) toSave[k] = map[k];
     await this.state.storage.put(toSave);
   }
-
-  // -------------------------------------------------------------
-  // HTTP / WebSocket entrypoint
-  // -------------------------------------------------------------
 
   async fetch(request) {
     await this.ready;
@@ -116,7 +95,7 @@ export class ListRoom {
     if (url.pathname === '/api/export') {
       return new Response(JSON.stringify({
         lists: this.lists, items: this.items, shops: this.shops, units: this.units,
-        templates: this.templates, favorites: this.favorites, history: this.history
+        templates: this.templates, favorites: this.favorites, history: this.history, notes: this.notes
       }, null, 2), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -163,7 +142,8 @@ export class ListRoom {
       units: this.units,
       categories: DEFAULT_CATEGORIES,
       templates: this.templates,
-      favorites: this.favorites
+      favorites: this.favorites,
+      notes: this.notes
     });
   }
 
@@ -245,7 +225,7 @@ export class ListRoom {
   // -------------------------------------------------------------
 
   async act_createList(p, by) {
-    const id = uid();
+    const id = p.id || uid(); // ZMIANA: Pozwala klientowi narzucić powiązane ID
     const list = {
       id,
       name: (p.name || 'Nowa lista').toString().slice(0, 60),
@@ -387,12 +367,6 @@ export class ListRoom {
     this.event(by, `${by} zapisał(a) szablon "${tpl.name}"`);
   }
 
-  async act_deleteTemplate(p) {
-    this.templates = this.templates.filter((t) => t.id !== p.id);
-    await this.persist(['templates']);
-    this.broadcast({ type: 'state', slice: 'templates', data: this.templates });
-  }
-
   async act_createTemplate(p, by) {
     const items = (p.items || []).map(name => ({
       name: name.trim(), qty: 1, unit: 'szt.', shop: '', category: '', note: ''
@@ -408,6 +382,12 @@ export class ListRoom {
     await this.persist(['templates']);
     this.broadcast({ type: 'state', slice: 'templates', data: this.templates });
     this.event(by, `${by} utworzył(a) szablon "${tpl.name}"`);
+  }
+
+  async act_deleteTemplate(p) {
+    this.templates = this.templates.filter((t) => t.id !== p.id);
+    await this.persist(['templates']);
+    this.broadcast({ type: 'state', slice: 'templates', data: this.templates });
   }
 
   // -------------------------------------------------------------
@@ -567,5 +547,84 @@ export class ListRoom {
     this.units = this.units.filter((u) => u !== p.name);
     await this.persist(['units']);
     this.broadcast({ type: 'state', slice: 'units', data: this.units });
+  }
+
+  // -------------------------------------------------------------
+  // Akcje: NOTATKI
+  // -------------------------------------------------------------
+
+  async act_createNote(p, by) {
+    const id = p.id || uid();
+    const note = {
+      id,
+      title: p.title || 'Bez tytułu',
+      body: p.linkedListId ? '<ul><li><br></li></ul>' : '',
+      tiles: [],
+      linkedListId: p.linkedListId || null,
+      updatedAt: now()
+    };
+    this.notes.unshift(note);
+    await this.persist(['notes']);
+    this.broadcast({ type: 'state', slice: 'notes', data: this.notes });
+  }
+
+  async act_updateNote(p, by) {
+    const note = this.notes.find(n => n.id === p.id);
+    if (!note) return;
+    
+    if (p.patch) {
+      Object.assign(note, p.patch);
+      note.updatedAt = now();
+
+      // AUTO-SYNC Z LISTĄ ZAKUPÓW: Analizowanie HTML w poszukiwaniu tagów <li>
+      if (note.linkedListId && p.patch.body !== undefined) {
+        const liRegex = /<li[^>]*>(.*?)<\/li>/gi;
+        let match;
+        const extractedNames = [];
+        
+        while ((match = liRegex.exec(p.patch.body)) !== null) {
+          let cleanName = match[1].replace(/<[^>]*>?/gm, '').trim(); // usuń ewentualne inne tagi wewnątrz li
+          cleanName = cleanName.replace(/&nbsp;/g, ' ').trim(); // oczyść spacje html
+          if (cleanName && cleanName !== '<br>') {
+            extractedNames.push(cleanName);
+          }
+        }
+
+        if (extractedNames.length > 0) {
+          const listItems = this.items[note.linkedListId] || (this.items[note.linkedListId] = []);
+          let added = 0;
+          for (const name of extractedNames) {
+            // Sprawdź czy już jest na liście żeby uniknąć powielania
+            const exists = listItems.some(i => i.name.toLowerCase() === name.toLowerCase());
+            if (!exists) {
+              listItems.push({
+                id: uid(), name, emoji: emojiFor(name), qty: 1, unit: 'szt.', shop: '', category: '', note: '', done: false, order: now(), createdAt: now()
+              });
+              this.bumpFavorite(name);
+              added++;
+            }
+          }
+          
+          if (added > 0) {
+            this.touchList(note.linkedListId, 'System (Notatnik)');
+            this.pushHistory(note.linkedListId, 'System', `Dodano ${added} el. z notatki`);
+            await this.persist(['items', 'favorites', 'lists', 'history']);
+            this.broadcastItemsAll();
+            this.broadcastLists();
+            this.broadcastListDetail(note.linkedListId);
+            this.broadcast({ type: 'state', slice: 'favorites', data: this.favorites });
+          }
+        }
+      }
+    }
+
+    await this.persist(['notes']);
+    this.broadcast({ type: 'state', slice: 'notes', data: this.notes });
+  }
+
+  async act_deleteNote(p, by) {
+    this.notes = this.notes.filter(n => n.id !== p.id);
+    await this.persist(['notes']);
+    this.broadcast({ type: 'state', slice: 'notes', data: this.notes });
   }
 }
