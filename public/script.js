@@ -19,6 +19,8 @@ const state = {
   favorites: {},
   notes: [], // NOWE
   route: { name: 'home', id: null },
+  listKindFilter: 'shopping', // 'shopping' | 'todo' — która zakładka na ekranie Listy jest aktywna
+  noteKindFilter: 'all', // 'all' | 'shopping' | 'todo' — zakładka na ekranie Notatnik
   filterShop: 'all',
   groupByCategory: false,
   shoppingMode: false,
@@ -244,13 +246,17 @@ const COLORS = ['#7f8c6a', '#b17263', '#7590a8', '#c9a24b', '#8a6bb3', '#5c8c7f'
 // =====================================================================
 
 function renderHome() {
-  const lists = activeLists();
+  const lists = activeLists().filter((l) => (l.kind || 'shopping') === state.listKindFilter);
   const pinned = lists.filter((l) => l.pinned);
   const rest = lists.filter((l) => !l.pinned);
 
-  let html = '';
+  let html = `<div class="kind-tabs">
+    <button type="button" class="kind-tab${state.listKindFilter === 'shopping' ? ' active' : ''}" data-kind="shopping">🛒 Zakupy</button>
+    <button type="button" class="kind-tab${state.listKindFilter === 'todo' ? ' active' : ''}" data-kind="todo">🎒 Do wzięcia</button>
+  </div>`;
+
   if (!lists.length) {
-    html += `<div class="empty-state"><p>Brak aktywnych list.</p><p class="empty-sub">Stwórz pierwszą listę zakupów przyciskiem poniżej.</p></div>`;
+    html += `<div class="empty-state"><p>Brak list w tej zakładce.</p><p class="empty-sub">Stwórz pierwszą listę przyciskiem poniżej.</p></div>`;
   } else {
     if (pinned.length) { html += `<p class="section-label">Przypięte</p>` + pinned.map(listCard).join(''); }
     html += (pinned.length ? `<p class="section-label">Wszystkie listy</p>` : '') + rest.map(listCard).join('');
@@ -258,6 +264,9 @@ function renderHome() {
   html += `<button type="button" class="fab" id="new-list-fab" aria-label="Nowa lista"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
 
   viewEl.innerHTML = html;
+  viewEl.querySelectorAll('.kind-tab').forEach((btn) => {
+    btn.addEventListener('click', () => { state.listKindFilter = btn.dataset.kind; renderHome(); });
+  });
   viewEl.querySelectorAll('.list-card').forEach((card) => {
     card.addEventListener('click', (e) => {
       if (e.target.closest('.list-card-menu-btn')) return;
@@ -268,7 +277,7 @@ function renderHome() {
       openListMenuModal(card.dataset.id);
     });
   });
-  document.getElementById('new-list-fab').addEventListener('click', () => openListFormModal());
+  document.getElementById('new-list-fab').addEventListener('click', () => openListFormModal(null, state.listKindFilter));
 }
 
 function listCard(l) {
@@ -317,11 +326,18 @@ function openListMenuModal(id) {
   });
 }
 
-function openListFormModal(existing) {
+function openListFormModal(existing, defaultKind) {
   const isEdit = !!existing;
   const templates = state.templates;
+  const kind = isEdit ? (existing.kind || 'shopping') : (defaultKind || 'shopping');
   openModal(`
     <h2>${isEdit ? 'Edytuj listę' : 'Nowa lista'}</h2>
+    <div class="field"><label>Rodzaj listy</label>
+      <div class="segmented" id="f-kind">
+        <button type="button" data-v="shopping" class="${kind === 'shopping' ? 'active' : ''}">🛒 Zakupy</button>
+        <button type="button" data-v="todo" class="${kind === 'todo' ? 'active' : ''}">🎒 Do wzięcia</button>
+      </div>
+    </div>
     <div class="field"><label>Nazwa</label><input class="text-input" id="f-name" maxlength="60" value="${isEdit ? esc(existing.name) : ''}" placeholder="np. Zakupy na weekend"></div>
     <div class="field"><label>Opis (opcjonalnie)</label><input class="text-input" id="f-desc" maxlength="200" value="${isEdit ? esc(existing.description) : ''}"></div>
     <div class="field"><label>Ikona</label><div class="icon-picker">${ICONS.map((i) => `<div class="icon-opt${(isEdit ? existing.icon : '🛒') === i ? ' active' : ''}" data-icon="${i}">${i}</div>`).join('')}</div></div>
@@ -335,8 +351,10 @@ function openListFormModal(existing) {
   `, (root) => {
     let icon = isEdit ? existing.icon : '🛒';
     let color = isEdit ? existing.color : COLORS[0];
+    let selectedKind = kind;
     root.querySelectorAll('.icon-opt').forEach((el) => el.onclick = () => { root.querySelectorAll('.icon-opt').forEach((x) => x.classList.remove('active')); el.classList.add('active'); icon = el.dataset.icon; });
     root.querySelectorAll('.color-opt').forEach((el) => el.onclick = () => { root.querySelectorAll('.color-opt').forEach((x) => x.classList.remove('active')); el.classList.add('active'); color = el.dataset.color; });
+    root.querySelector('#f-kind').addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; selectedKind = btn.dataset.v; root.querySelectorAll('#f-kind button').forEach((b) => b.classList.toggle('active', b === btn)); });
     root.querySelector('#f-cancel').onclick = closeModal;
     root.querySelector('#f-save').onclick = () => {
       const name = root.querySelector('#f-name').value.trim();
@@ -345,10 +363,10 @@ function openListFormModal(existing) {
       const budgetVal = root.querySelector('#f-budget').value;
       const budget = budgetVal ? Number(budgetVal) : null;
       if (isEdit) {
-        sendAction('updateList', { id: existing.id, patch: { name, description, icon, color, budget } });
+        sendAction('updateList', { id: existing.id, patch: { name, description, icon, color, kind: selectedKind, budget } });
       } else {
         const templateId = root.querySelector('#f-template') ? root.querySelector('#f-template').value : '';
-        sendAction('createList', { name, description, icon, color, budget, templateId: templateId || null });
+        sendAction('createList', { name, description, icon, color, kind: selectedKind, budget, templateId: templateId || null });
       }
       closeModal();
     };
@@ -454,7 +472,7 @@ function itemRow(it) {
     </button>
     <span class="item-emoji">${it.emoji || '🛒'}</span>
     <div class="item-body" data-edit="${it.id}">
-      <p class="item-name">${esc(it.name)}${it.qty && it.qty !== 1 ? ` · ${it.qty}${it.unit ? ' ' + esc(it.unit) : ''}` : (it.unit && it.unit !== 'szt.' ? ' · ' + esc(it.unit) : '')}</p>
+      <p class="item-name">${esc(it.name)}${it.count && it.count > 1 ? ` <span class="count-badge">razy ${it.count}</span>` : ''}${it.qty && it.qty !== 1 ? ` · ${it.qty}${it.unit ? ' ' + esc(it.unit) : ''}` : (it.unit && it.unit !== 'szt.' ? ' · ' + esc(it.unit) : '')}</p>
       <p class="item-meta">
         ${it.shop ? `<span class="tag">${esc(it.shop)}</span>` : ''}
         ${it.category ? `<span class="tag">${esc(it.category)}</span>` : ''}
@@ -719,18 +737,30 @@ function openNewTemplateModal() {
 // NOTATNIK
 // =====================================================================
 
+function noteKind(n) {
+  if (!n.linkedListId) return 'none';
+  const l = state.lists.find((x) => x.id === n.linkedListId);
+  return l ? (l.kind || 'shopping') : 'none';
+}
+
 function renderNotesList() {
-  const notes = [...state.notes].sort((a,b) => b.updatedAt - a.updatedAt);
-  let html = '';
-  
+  const allNotes = [...state.notes].sort((a,b) => b.updatedAt - a.updatedAt);
+  const notes = state.noteKindFilter === 'all' ? allNotes : allNotes.filter((n) => noteKind(n) === state.noteKindFilter);
+
+  let html = `<div class="kind-tabs">
+    <button type="button" class="kind-tab${state.noteKindFilter === 'all' ? ' active' : ''}" data-kind="all">Wszystkie</button>
+    <button type="button" class="kind-tab${state.noteKindFilter === 'shopping' ? ' active' : ''}" data-kind="shopping">🛒 Zakupy</button>
+    <button type="button" class="kind-tab${state.noteKindFilter === 'todo' ? ' active' : ''}" data-kind="todo">🎒 Do wzięcia</button>
+  </div>`;
+
   if (!notes.length) {
-    html = `<div class="empty-state"><p>Brak notatek.</p><p class="empty-sub">Stwórz nową przyciskiem poniżej.</p></div>`;
+    html += `<div class="empty-state"><p>Brak notatek w tej zakładce.</p><p class="empty-sub">Stwórz nową przyciskiem poniżej.</p></div>`;
   } else {
-    html = notes.map((n) => `
+    html += notes.map((n) => `
       <div class="plain-card" style="cursor:pointer;" data-open-note="${n.id}">
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div>
-             <p class="plain-card-title">${n.linkedListId ? '🛒 ' : ''}${esc(n.title)}</p>
+             <p class="plain-card-title">${noteKind(n) === 'shopping' ? '🛒 ' : noteKind(n) === 'todo' ? '🎒 ' : ''}${esc(n.title)}</p>
              <p class="plain-card-sub">Ostatnia zmiana: ${timeAgo(n.updatedAt)}</p>
           </div>
           <button type="button" class="del-btn" data-del-note="${n.id}" aria-label="Usuń" style="margin-top:-6px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
@@ -742,6 +772,9 @@ function renderNotesList() {
   html += `<button type="button" class="fab" id="new-note-fab" aria-label="Nowa notatka"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
   viewEl.innerHTML = html;
 
+  viewEl.querySelectorAll('.kind-tab').forEach((btn) => {
+    btn.addEventListener('click', () => { state.noteKindFilter = btn.dataset.kind; renderNotesList(); });
+  });
   viewEl.querySelectorAll('[data-open-note]').forEach((card) => {
     card.addEventListener('click', (e) => {
       if(e.target.closest('[data-del-note]')) return;
@@ -761,29 +794,28 @@ function openNewNoteModal() {
   openModal(`
     <h2>Nowa notatka</h2>
     <div class="field"><input class="text-input" id="nn-title" placeholder="Tytuł notatki" maxlength="60"></div>
-    <div class="toggle-row">
-      <div class="toggle-row-text">
-        <span class="toggle-label">🛒 Lista zakupów</span>
-        <span class="toggle-hint">Z automatu przeniesie wypunktowania na listę</span>
+    <div class="field"><label>Rodzaj notatki</label>
+      <div class="segmented" id="nn-kind">
+        <button type="button" data-v="none" class="active">Zwykła</button>
+        <button type="button" data-v="shopping">🛒 Zakupy</button>
+        <button type="button" data-v="todo">🎒 Do wzięcia</button>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="nn-shopping">
-        <span class="switch-track"><span class="switch-thumb"></span></span>
-      </label>
+      <p class="settings-sub" style="margin-top:6px;">Przy "Zakupy" i "Do wzięcia" wypunktowania w notatce automatycznie trafią na powiązaną listę.</p>
     </div>
     <div class="modal-actions"><button type="button" class="btn-secondary" id="nn-cancel">Anuluj</button><button type="button" class="btn-primary" id="nn-save">Utwórz</button></div>
   `, (root) => {
+    let selectedKind = 'none';
+    root.querySelector('#nn-kind').addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; selectedKind = btn.dataset.v; root.querySelectorAll('#nn-kind button').forEach((b) => b.classList.toggle('active', b === btn)); });
     root.querySelector('#nn-cancel').onclick = closeModal;
     root.querySelector('#nn-save').onclick = () => {
       const title = root.querySelector('#nn-title').value.trim() || 'Bez tytułu';
-      const isShopping = root.querySelector('#nn-shopping').checked;
-      
+
       const newNoteId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
       let linkedListId = null;
 
-      if(isShopping) {
+      if (selectedKind === 'shopping' || selectedKind === 'todo') {
          linkedListId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-         sendAction('createList', { id: linkedListId, name: title, icon: '📝', color: COLORS[4] });
+         sendAction('createList', { id: linkedListId, name: title, icon: selectedKind === 'todo' ? '🎒' : '📝', color: COLORS[4], kind: selectedKind });
       }
 
       sendAction('createNote', { id: newNoteId, title, linkedListId });
@@ -856,8 +888,83 @@ function renderNoteEditor(id) {
     }, 600);
   }
 
+  // ---------------------------------------------------------------
+  // SYNCHRONIZACJA LINIJEK Z LISTĄ ZAKUPÓW (tylko gdy notatka jest
+  // powiązana z listą — note.linkedListId). Każda linijka (<li>)
+  // dostaje swój własny, stały identyfikator (data-lid) — to on
+  // pozwala rozpoznać "tę samą" linijkę, gdy wrócisz do niej po
+  // czasie, żeby zaktualizować istniejący produkt zamiast tworzyć
+  // nowy. Wysyłka do serwera następuje dopiero, gdy przestaniesz
+  // pisać w danej linijce (np. przejdziesz do następnej) — a nie po
+  // każdej wciśniętej literze.
+  // ---------------------------------------------------------------
+  let lidCounter = 0;
+  function nextLid() { return 'l' + Date.now().toString(36) + (lidCounter++); }
+
+  function ensureLineIds() {
+    editor.querySelectorAll('li').forEach((li) => {
+      if (!li.dataset.lid) li.dataset.lid = nextLid();
+    });
+  }
+
+  function lineText(li) {
+    return (li.innerText || li.textContent || '').replace(/\u00A0/g, ' ').trim();
+  }
+
+  function currentLineEl() {
+    const sel = window.getSelection();
+    if (!sel || !sel.anchorNode) return null;
+    let node = sel.anchorNode;
+    if (node.nodeType === 3) node = node.parentElement;
+    return node && node.closest ? node.closest('li') : null;
+  }
+
+  // Zapamiętujemy, co ostatnio wysłaliśmy dla danej linijki, żeby nie
+  // wysyłać w kółko tego, co się nie zmieniło.
+  const lineSnapshots = new Map();
+  if (note.linkedListId) {
+    ensureLineIds();
+    editor.querySelectorAll('li').forEach((li) => lineSnapshots.set(li.dataset.lid, lineText(li)));
+  }
+
+  let noteSyncTimer;
+  function scheduleNoteSync() {
+    if (!note.linkedListId) return;
+    clearTimeout(noteSyncTimer);
+    noteSyncTimer = setTimeout(() => runNoteSync(false), 800);
+  }
+
+  function runNoteSync(forceAll) {
+    if (!note.linkedListId) return;
+    ensureLineIds();
+    const active = forceAll ? null : currentLineEl();
+    const activeLid = active ? active.dataset.lid : null;
+
+    const seenLids = new Set();
+    const lines = [];
+    editor.querySelectorAll('li').forEach((li) => {
+      const lid = li.dataset.lid;
+      seenLids.add(lid);
+      if (lid === activeLid) return; // ta linijka jest właśnie edytowana — jeszcze poczekaj
+      const text = lineText(li);
+      if (lineSnapshots.get(lid) === text) return; // bez zmian
+      lineSnapshots.set(lid, text);
+      lines.push({ lid, text });
+    });
+
+    const removedLids = [];
+    for (const lid of lineSnapshots.keys()) {
+      if (!seenLids.has(lid)) { removedLids.push(lid); lineSnapshots.delete(lid); }
+    }
+
+    if (lines.length || removedLids.length) {
+      sendAction('syncNoteLines', { id, lines, removedLids });
+    }
+  }
+
   titleInp.addEventListener('input', scheduleSave);
-  editor.addEventListener('input', scheduleSave);
+  editor.addEventListener('input', () => { scheduleSave(); scheduleNoteSync(); });
+  editor.addEventListener('blur', () => runNoteSync(true));
 
   document.getElementById('btn-bold').addEventListener('click', () => { editor.focus(); document.execCommand('bold'); scheduleSave(); });
   document.getElementById('btn-italic').addEventListener('click', () => { editor.focus(); document.execCommand('italic'); scheduleSave(); });
