@@ -606,6 +606,17 @@ export class ListRoom {
   async act_syncNoteLines(p, by) {
     const note = this.notes.find(n => n.id === p.id);
     if (!note || !note.linkedListId) return;
+
+    // ZABEZPIECZENIE: Jeśli powiązana lista została wcześniej usunięta,
+    // odpinamy notatkę, żeby nie tworzyła produktów "w próżni".
+    const listExists = this.lists.some(l => l.id === note.linkedListId);
+    if (!listExists) {
+      note.linkedListId = null;
+      note.lineMap = {};
+      await this.persist(['notes']);
+      return;
+    }
+
     if (!note.lineMap) note.lineMap = {};
 
     const listItems = this.items[note.linkedListId] || (this.items[note.linkedListId] = []);
@@ -620,8 +631,11 @@ export class ListRoom {
       delete note.lineMap[lid];
       const it = listItems.find((i) => i.id === itemId);
       if (!it) return;
-      if ((it.count || 1) > 1) { it.count -= 1; }
-      else { this.items[note.linkedListId] = this.items[note.linkedListId].filter((i) => i.id !== itemId); }
+      if ((it.count || 1) > 1) { 
+        it.count -= 1; 
+      } else { 
+        this.items[note.linkedListId] = this.items[note.linkedListId].filter((i) => i.id !== itemId); 
+      }
       changed = true;
     };
 
@@ -638,19 +652,47 @@ export class ListRoom {
       const mappedItem = mappedId ? listItems.find((i) => i.id === mappedId) : null;
 
       if (mappedItem) {
-        if (mappedItem.name.toLowerCase() === text.toLowerCase()) continue; // bez zmian, nic nie rób
-
-        // Linijka zmieniła nazwę produktu (np. dopisano literę albo poprawiono).
-        const other = findByName(text, mappedItem.id);
-        if (other) {
-          // Ktoś ma już taki produkt na liście (np. inna linijka) — scalamy.
-          other.count = (other.count || 1) + 1;
-          if ((mappedItem.count || 1) > 1) { mappedItem.count -= 1; }
-          else { this.items[note.linkedListId] = this.items[note.linkedListId].filter((i) => i.id !== mappedItem.id); }
-          note.lineMap[lid] = other.id;
-        } else {
+        // Jeśli zmieniła się tylko wielkość liter, po prostu aktualizuj i idź dalej
+        if (mappedItem.name.toLowerCase() === text.toLowerCase()) {
           mappedItem.name = text;
-          mappedItem.emoji = emojiFor(text);
+          continue;
+        }
+
+        // --- Zmieniono całkowicie nazwę istniejącej linijki ---
+        const currentCount = mappedItem.count || 1;
+        const other = findByName(text, mappedItem.id);
+
+        if (other) {
+          // 1. Docelowy produkt (np. wpisano Mleko, a Mleko już jest na liście). Podpinamy się.
+          other.count = (other.count || 1) + 1;
+          note.lineMap[lid] = other.id;
+
+          if (currentCount > 1) {
+            mappedItem.count -= 1; // Odpinamy się od starego (np. Jajek)
+          } else {
+            // Stary produkt był używany tylko tu, więc go usuwamy całkowicie
+            this.items[note.linkedListId] = this.items[note.linkedListId].filter((i) => i.id !== mappedItem.id);
+          }
+        } else {
+          // 2. Docelowego produktu nie ma na liście.
+          if (currentCount > 1) {
+            // Stary produkt jest podpięty do innych linijek. Odpinamy się i tworzymy nowy dla nas.
+            mappedItem.count -= 1;
+            
+            const newItem = {
+              id: uid(), name: text, emoji: emojiFor(text), qty: 1, unit: 'szt.',
+              shop: '', category: '', note: '', done: false, count: 1, order: now(), createdAt: now()
+            };
+            listItems.push(newItem);
+            note.lineMap[lid] = newItem.id;
+            this.bumpFavorite(text);
+          } else {
+            // Stary produkt należał tylko do tej linijki, więc po prostu zmieniamy mu nazwę 
+            // (dzięki temu zachowa m.in. status bycia "odhaczonym" / kupionym).
+            mappedItem.name = text;
+            mappedItem.emoji = emojiFor(text);
+            this.bumpFavorite(text);
+          }
         }
         changed = true;
       } else {
