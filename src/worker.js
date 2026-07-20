@@ -76,6 +76,17 @@ export class ListRoom {
     this.favorites = stored.get('favorites') || {}; 
     this.history = stored.get('history') || {};     
     this.notes = stored.get('notes') || []; // NOWE
+
+    // MIGRACJA: stare listy/notatki nie mają jeszcze pola "kind" / "lineMap".
+    // Dopisujemy im wartości domyślne, żeby nic nie zniknęło i nie wywaliło błędu.
+    let needsMigration = false;
+    for (const l of this.lists) {
+      if (!l.kind) { l.kind = 'shopping'; needsMigration = true; }
+    }
+    for (const n of this.notes) {
+      if (!n.lineMap) { n.lineMap = {}; needsMigration = true; }
+    }
+    if (needsMigration) await this.persist(['lists', 'notes']);
   }
 
   async persist(keys) {
@@ -232,6 +243,7 @@ export class ListRoom {
       description: (p.description || '').toString().slice(0, 200),
       color: p.color || '#7f8c6a',
       icon: p.icon || '🛒',
+      kind: p.kind === 'todo' ? 'todo' : 'shopping',
       pinned: false,
       archived: false,
       budget: p.budget ? Number(p.budget) : null,
@@ -265,7 +277,7 @@ export class ListRoom {
     const list = this.lists.find((x) => x.id === p.id);
     if (!list) return;
     const patch = p.patch || {};
-    for (const k of ['name', 'description', 'color', 'icon', 'pinned', 'budget']) {
+    for (const k of ['name', 'description', 'color', 'icon', 'kind', 'pinned', 'budget']) {
       if (k in patch) list[k] = patch[k];
     }
     this.touchList(list.id, by);
@@ -561,6 +573,7 @@ export class ListRoom {
       body: '',
       tiles: [],
       linkedListId: p.linkedListId || null,
+      lineMap: {}, // mapowanie: id linijki w notatce -> id produktu na liście
       updatedAt: now()
     };
     this.notes.unshift(note);
@@ -571,55 +584,105 @@ export class ListRoom {
   async act_updateNote(p, by) {
     const note = this.notes.find(n => n.id === p.id);
     if (!note) return;
-    
+
     if (p.patch) {
+      // UWAGA: to tylko zapisuje treść notatki (tytuł, HTML, kafelki).
+      // Dodawanie/aktualizowanie produktów na liście dzieje się teraz
+      // osobno, w act_syncNoteLines — patrz niżej.
       Object.assign(note, p.patch);
       note.updatedAt = now();
-
-      // AUTO-SYNC Z LISTĄ ZAKUPÓW: Analizowanie HTML w poszukiwaniu tagów <li>
-      if (note.linkedListId && p.patch.body !== undefined) {
-        const liRegex = /<li[^>]*>(.*?)<\/li>/gi;
-        let match;
-        const extractedNames = [];
-        
-        while ((match = liRegex.exec(p.patch.body)) !== null) {
-          let cleanName = match[1].replace(/<[^>]*>?/gm, '').trim(); // usuń ewentualne inne tagi wewnątrz li
-          cleanName = cleanName.replace(/&nbsp;/g, ' ').trim(); // oczyść spacje html
-          if (cleanName && cleanName !== '<br>') {
-            extractedNames.push(cleanName);
-          }
-        }
-
-        if (extractedNames.length > 0) {
-          const listItems = this.items[note.linkedListId] || (this.items[note.linkedListId] = []);
-          let added = 0;
-          for (const name of extractedNames) {
-            // Sprawdź czy już jest na liście żeby uniknąć powielania
-            const exists = listItems.some(i => i.name.toLowerCase() === name.toLowerCase());
-            if (!exists) {
-              listItems.push({
-                id: uid(), name, emoji: emojiFor(name), qty: 1, unit: 'szt.', shop: '', category: '', note: '', done: false, order: now(), createdAt: now()
-              });
-              this.bumpFavorite(name);
-              added++;
-            }
-          }
-          
-          if (added > 0) {
-            this.touchList(note.linkedListId, 'System (Notatnik)');
-            this.pushHistory(note.linkedListId, 'System', `Dodano ${added} el. z notatki`);
-            await this.persist(['items', 'favorites', 'lists', 'history']);
-            this.broadcastItemsAll();
-            this.broadcastLists();
-            this.broadcastListDetail(note.linkedListId);
-            this.broadcast({ type: 'state', slice: 'favorites', data: this.favorites });
-          }
-        }
-      }
     }
 
     await this.persist(['notes']);
     this.broadcast({ type: 'state', slice: 'notes', data: this.notes });
+  }
+
+  // Wywoływane, gdy użytkownik SKOŃCZY pisać daną linijkę notatki (przejdzie
+  // do kolejnej linijki albo kliknie/wyjdzie z edytora) — a nie po każdej
+  // wpisanej literze. Każda linijka ma swój stały identyfikator (lid),
+  // dzięki czemu wracając do niej później aktualizujemy ten sam produkt,
+  // a nie tworzymy nowego. Jeśli dwie linijki mają tę samą nazwę produktu,
+  // są scalane w jeden wpis z licznikiem (np. "jajka razy 2").
+  async act_syncNoteLines(p, by) {
+    const note = this.notes.find(n => n.id === p.id);
+    if (!note || !note.linkedListId) return;
+    if (!note.lineMap) note.lineMap = {};
+
+    const listItems = this.items[note.linkedListId] || (this.items[note.linkedListId] = []);
+    let changed = false;
+
+    const findByName = (name, excludeId) =>
+      listItems.find((i) => i.id !== excludeId && i.name.toLowerCase() === name.toLowerCase());
+
+    const removeMapping = (lid) => {
+      const itemId = note.lineMap[lid];
+      if (!itemId) return;
+      delete note.lineMap[lid];
+      const it = listItems.find((i) => i.id === itemId);
+      if (!it) return;
+      if ((it.count || 1) > 1) { it.count -= 1; }
+      else { this.items[note.linkedListId] = this.items[note.linkedListId].filter((i) => i.id !== itemId); }
+      changed = true;
+    };
+
+    for (const lid of (p.removedLids || [])) removeMapping(lid);
+
+    for (const line of (p.lines || [])) {
+      const lid = line && line.lid;
+      if (!lid) continue;
+      const text = (line.text || '').toString().replace(/&nbsp;/g, ' ').trim().slice(0, 60);
+
+      if (!text) { removeMapping(lid); continue; }
+
+      const mappedId = note.lineMap[lid];
+      const mappedItem = mappedId ? listItems.find((i) => i.id === mappedId) : null;
+
+      if (mappedItem) {
+        if (mappedItem.name.toLowerCase() === text.toLowerCase()) continue; // bez zmian, nic nie rób
+
+        // Linijka zmieniła nazwę produktu (np. dopisano literę albo poprawiono).
+        const other = findByName(text, mappedItem.id);
+        if (other) {
+          // Ktoś ma już taki produkt na liście (np. inna linijka) — scalamy.
+          other.count = (other.count || 1) + 1;
+          if ((mappedItem.count || 1) > 1) { mappedItem.count -= 1; }
+          else { this.items[note.linkedListId] = this.items[note.linkedListId].filter((i) => i.id !== mappedItem.id); }
+          note.lineMap[lid] = other.id;
+        } else {
+          mappedItem.name = text;
+          mappedItem.emoji = emojiFor(text);
+        }
+        changed = true;
+      } else {
+        // Nowa linijka, jeszcze niepowiązana z żadnym produktem.
+        const other = findByName(text, null);
+        if (other) {
+          other.count = (other.count || 1) + 1;
+          note.lineMap[lid] = other.id;
+        } else {
+          const newItem = {
+            id: uid(), name: text, emoji: emojiFor(text), qty: 1, unit: 'szt.',
+            shop: '', category: '', note: '', done: false, count: 1, order: now(), createdAt: now()
+          };
+          listItems.push(newItem);
+          note.lineMap[lid] = newItem.id;
+          this.bumpFavorite(text);
+        }
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.touchList(note.linkedListId, 'System (Notatnik)');
+      this.pushHistory(note.linkedListId, 'System', `Zaktualizowano listę z notatki "${note.title}"`);
+      await this.persist(['items', 'favorites', 'lists', 'history', 'notes']);
+      this.broadcastItemsAll();
+      this.broadcastLists();
+      this.broadcastListDetail(note.linkedListId);
+      this.broadcast({ type: 'state', slice: 'favorites', data: this.favorites });
+    } else {
+      await this.persist(['notes']);
+    }
   }
 
   async act_deleteNote(p, by) {
