@@ -19,5 +19,11 @@
       "tag": "v1",
       "new_sqlite_classes": ["ListRoom"]
     }
-  ]
+  ],
+  "observability": {
+    "logs": {
+      "enabled": false,
+      "invocation_logs": true
+    }
+  }
 }
