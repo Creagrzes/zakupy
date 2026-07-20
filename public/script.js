@@ -902,8 +902,12 @@ function renderNoteEditor(id) {
   function nextLid() { return 'l' + Date.now().toString(36) + (lidCounter++); }
 
   function ensureLineIds() {
+    const seen = new Set();
     editor.querySelectorAll('li').forEach((li) => {
-      if (!li.dataset.lid) li.dataset.lid = nextLid();
+      if (!li.dataset.lid || seen.has(li.dataset.lid)) {
+        li.dataset.lid = nextLid();
+      }
+      seen.add(li.dataset.lid);
     });
   }
 
