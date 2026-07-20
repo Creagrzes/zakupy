@@ -862,10 +862,10 @@ function renderNoteEditor(id) {
     <div id="note-toolbar" class="note-toolbar">
       <button type="button" class="tool-btn" id="btn-bold"><b>B</b></button>
       <button type="button" class="tool-btn" id="btn-italic"><i>I</i></button>
-      <button type="button" class="tool-btn" id="btn-list">≡• Lista</button>
+      <button type="button" class="tool-btn" id="btn-list">≡•</button>
       <button type="button" class="tool-btn" id="btn-font-minus">A-</button>
       <button type="button" class="tool-btn" id="btn-font-plus">A+</button>
-      <button type="button" class="tool-btn active" id="btn-tile" style="margin-left: auto;">+ Kafelek</button>
+      <button type="button" class="tool-btn active" id="btn-tile">+ Tile</button>
     </div>
   `;
 
