@@ -830,15 +830,18 @@ function renderNoteEditor(id) {
   if (!note) { viewEl.innerHTML = `<div class="empty-state"><p>Notatka nie istnieje.</p></div>`; return; }
 
 
-    // --- DODAJ TEN FRAGMENT TUTAJ ---
-  const currentTitle = document.getElementById('note-title-input');
+   const currentTitle = document.getElementById('note-title-input');
   const currentEditor = document.getElementById('text-editor');
   
   if (currentTitle && currentEditor && viewEl.dataset.activeNoteId === id) {
-    // Aktualizujemy zawartość tylko jeśli akurat nie mamy tam wciśniętego kursora
     if (document.activeElement !== currentTitle) currentTitle.value = note.title;
-    if (document.activeElement !== currentEditor) currentEditor.innerHTML = note.body;
-    return; // Przerywamy dalsze budowanie widoku, by chronić klawiaturę!
+    
+    // TARCZA OCHRONNA: Nadpisujemy edytor z serwera tylko, jeśli użytkownik 
+    // nic nie pisał przez ostatnie 2,5 sekundy. Chroni to przed znikaniem tekstu na iOS.
+    if (document.activeElement !== currentEditor && (Date.now() - (window.lastNoteEditTime || 0) > 2500)) {
+       currentEditor.innerHTML = note.body;
+    }
+    return;
   }
   viewEl.dataset.activeNoteId = id; // Zapamiętujemy ID aktualnie wyświetlanej notatki
   // --- KONIEC FRAGMENTU ---
@@ -966,8 +969,16 @@ function renderNoteEditor(id) {
     }
   }
 
-  titleInp.addEventListener('input', scheduleSave);
-  editor.addEventListener('input', () => { scheduleSave(); scheduleNoteSync(); });
+  titleInp.addEventListener('input', () => { 
+    window.lastNoteEditTime = Date.now(); 
+    scheduleSave(); 
+  });
+  
+  editor.addEventListener('input', () => { 
+    window.lastNoteEditTime = Date.now(); 
+    scheduleSave(); 
+    scheduleNoteSync(); 
+  });
   editor.addEventListener('blur', () => runNoteSync(true));
 
   document.getElementById('btn-bold').addEventListener('click', () => { editor.focus(); document.execCommand('bold'); scheduleSave(); });
