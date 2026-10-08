@@ -1,82 +1,77 @@
-# Lista zakupów – wersja 2 (realtime + wszystkie funkcje)
+# Zakupy 3.0 — wspólne listy zakupów, pakowania i zadań
 
-To jest duża rozbudowa poprzedniej wersji. Najważniejsza zmiana pod
-maską: zamiast bazy KV (i odświeżania co 4 sekundy) aplikacja używa teraz
-**Durable Objects** — to jak mini-serwer, który trzyma cały stan Waszej
-listy w pamięci i wysyła zmiany do obu telefonów **natychmiast** przez
-WebSocket, bez odświeżania.
+Aplikacja na telefon (PWA) do wspólnych list, synchronizowanych **na żywo** między osobami,
+działająca też **bez internetu**. Backend: Cloudflare Worker + Durable Object (bez bazy do zakładania).
 
-Struktura plików (bez zmian względem poprzedniej wersji):
-- `public/` — pliki, które widzi przeglądarka (`index.html`, `style.css`, `script.js`)
-- `src/worker.js` — cała logika backendu (listy, produkty, sklepy, szablony, historia, statystyki, WebSocket)
-- `wrangler.jsonc` — konfiguracja Cloudflare
+## Co potrafi
 
-## Krok 1: Podmień pliki w repozytorium na GitHubie
+**Trzy rodzaje list:** 🛒 Zakupy · 🎒 Pakowanie · ✅ Zadania.
 
-1. Wejdź do swojego repozytorium `zakupy` na GitHubie
-2. Usuń stare pliki: `index.html`, `style.css`, `script.js` (jeśli leżą luzem),
-   stary folder `functions` (jeśli jeszcze istnieje), stary `wrangler.jsonc`
-3. Kliknij **Add file → Upload files**
-4. Przeciągnij całą zawartość tego paczki, czyli:
-   - folder `public` (ze środkiem)
-   - folder `src` (ze środkiem)
-   - plik `wrangler.jsonc`
-5. **Commit changes**
+**Zagnieżdżanie bez limitu (bagaż → kieszeń → rzeczy)**
+- Dodaj „Plecak:” (dwukropek albo przycisk 📁) — od razu dodajesz *do środka* plecaka.
+- W plecaku dodaj „Mała kieszeń:”, a w niej „Ładowarka”, „Słuchawki”… Pasek „Dodajesz do: Plecak › Mała kieszeń” pozwala wrócić poziom wyżej jednym dotknięciem.
+- Każdy bagaż ma pierścień postępu (np. 3/7), można go zwinąć, odhaczyć w całości, otworzyć osobno (widok tylko zawartości z okruszkami), przenieść, zduplikować z zawartością albo zapisać jako szablon.
+- Rzeczy przenosisz między kieszeniami przeciągając (uchwyt ⋮⋮, upuść *na* bagaż = do środka) albo przez „Przenieś do…”.
+- Spakowana kieszeń sama się zwija; „🔄 Od nowa” odznacza wszystko przed kolejnym wyjazdem.
 
-## Krok 2: Wdróż ponownie
+**Pisanie zamiast klikania**
+- Szybkie dodawanie rozumie: `2 kg ziemniaki @Lidl #warzywa (młode) !` → ilość, jednostka, sklep, kategoria, notatka, „ważne”. Pod polem widać podgląd, co zostało rozpoznane.
+- Wklej kilka linijek naraz — każda staje się pozycją, wcięcia tworzą zagnieżdżenie.
+- **✍️ Pisz tekstem**: cała lista jako edytowalny konspekt (przyciski ⇥/⇤ do wcięć na telefonie). Zapis zachowuje odhaczenia, ceny i przypisania.
+- Notatnik: dowolna notatka (np. przepis) → jednym dotknięciem lista zakupów/pakowania albo dopisanie do istniejącej.
 
-Wróć do panelu Cloudflare, do swojego Workera `zakupy` → zakładka
-**Deployments** → poczekaj na nowy build (commit na GitHubie sam go
-wywoła, bo repo jest już podłączone) albo uruchom go ręcznie.
+**Zakupy**
+- Automatyczne kategorie i emoji (ok. 150 reguł po polsku), grupowanie po kategoriach (w kolejności alejek, ustawialnej) lub sklepach, filtr sklepu.
+- Sekcja „🧺 W koszyku”, tryb sklepu (duże przyciski, ekran nie gaśnie), ceny i budżet, podpowiedzi „często dodawane” z zapamiętaną kategorią/sklepem.
+- Dopisanie czegoś, co już jest: propozycja „+1”; coś już kupionego wraca na listę.
 
-**Nie musisz już zakładać żadnego namespace'u KV ani niczego wklejać.**
-Durable Object o nazwie `ListRoom` zostanie utworzony automatycznie przy
-pierwszym wdrożeniu — to właśnie robi sekcja `migrations` w
-`wrangler.jsonc`. Jeśli w panelu Cloudflare zostały jeszcze ustawienia
-starego namespace'u KV (`SHOPPING_LIST`), możesz je bezpiecznie usunąć
-w **Settings → Bindings** Workera — nowy kod już z nich nie korzysta.
+**Wygoda na telefonie**
+- Przesuń w prawo = odhacz, w lewo = usuń (z „Cofnij”). Cofanie także po usunięciu listy i czyszczeniu odhaczonych.
+- Arkusze od dołu zamykane gestem i przyciskiem „wstecz” Androida, pasek dodawania nad klawiaturą (iOS i Android), bezpieczne strefy iPhone'a, jasny/ciemny/automatyczny motyw, wibracje.
+- Instalacja na ekranie głównym; aplikacja otwiera się offline, zmiany czekają w kolejce i wysyłają się same.
 
-## Krok 3: Gotowe
+**Razem**
+- Zmiany widać u wszystkich od razu, kropka statusu połączenia, kto jest online, dymki „Ola spakowała Ładowarkę”, kto odhaczył, przypisanie osoby, historia zmian listy.
+- Osoby konfigurowalne (nie tylko dwie na sztywno), szablony własne + gotowe (weekend z plecakiem, wakacje z walizką, basen, tygodniowe zakupy, grill, przeprowadzka), archiwum, przypinanie, duplikowanie, łączenie list, terminy („za 3 dni”), wyszukiwanie wszędzie (także w kieszeniach), statystyki, kopia zapasowa JSON (pobierz / wczytaj).
 
-Otwórz adres swojego Workera (`zakupy.twoja-nazwa.workers.dev`) na
-telefonie — swoim i drugiej osoby. Wybierzcie swoje imiona przy
-pierwszym uruchomieniu. Od teraz każda zmiana (dodanie produktu,
-odhaczenie, nowa lista...) pojawia się u drugiej osoby **od razu**, bez
-odświeżania.
+## Struktura
 
-## Co zrobiono z całej listy życzeń
+```
+public/            pliki dla przeglądarki (serwowane jako statyczne zasoby)
+  index.html, css/app.css, sw.js, manifest.webmanifest, icons/
+  js/core.js       wspólny rdzeń: operacje na stanie, parser tekstu, drzewo, kategorie, migracja
+  js/store.js      synchronizacja (WebSocket, kolejka offline, pamięć podręczna)
+  js/ui.js, ctx.js, app.js, views/*.js   interfejs
+src/worker.js      Worker + Durable Object (importuje ten sam public/js/core.js)
+test/              testy rdzenia (node --test)
+```
 
-Zrobione w całości: wiele list (z kolorem/ikoną), produkty z ilością/
-jednostką/sklepem/kategorią/notatką/ceną, oznaczanie kupionych,
-zarządzanie sklepami i jednostkami (własne też), filtrowanie po sklepie,
-grupowanie po kategorii, szablony list, łączenie list, archiwum,
-historia zmian, wyszukiwanie (listy/produkty/sklepy), ulubione produkty
-z podpowiedziami przy wpisywaniu, przeciąganie kolejności produktów,
-tryb zakupów (duże przyciski), statystyki, ustawienia (imię, sklepy,
-jednostki, jasny/ciemny motyw, wyczyszczenie danych lokalnych),
-przypięte listy, emoji przy produktach, szybkie dodawanie (Enter po
-Enter), duplikowanie list, budżet listy, przypisanie produktu do osoby,
-ponowne dodanie z ulubionych jednym kliknięciem.
+Każda zmiana to „operacja” przepuszczana przez `applyOp()` z `core.js` — najpierw natychmiast
+na telefonie, potem na serwerze, który rozsyła ją do pozostałych. Ten sam kod po obu stronach
+gwarantuje identyczny wynik. Durable Object używa WebSocket Hibernation (tani w utrzymaniu)
+i zapisuje każdą listę pod osobnym kluczem.
 
-Zrobione w wersji uproszczonej (uczciwie o tym mówiąc):
-- **Powiadomienia** — tylko "w aplikacji": dyskretny toast, gdy druga
-  osoba coś zmieni, o ile masz appkę akurat otwartą. Prawdziwe
-  powiadomienia systemowe (zablokowany ekran, zamknięta appka)
-  wymagają Web Push + zgody użytkownika na powiadomienia — to osobny
-  temat na później, bo wymaga dodatkowej konfiguracji po stronie
-  Cloudflare i przeglądarki.
-- **Offline** — appka kolejkuje Twoje zmiany lokalnie, gdy nie masz
-  internetu, i wysyła je automatycznie po powrocie zasięgu. To *nie*
-  jest jeszcze pełna instalowalna aplikacja (PWA) działająca "od zera"
-  bez internetu — to również osobny, mniejszy krok na później
-  (dodanie manifestu i service workera), jeśli chcecie.
+## Wdrożenie
 
-## Jeśli coś nie działa
+Tak jak poprzednio: wrzuć zawartość repozytorium do podłączonego repo (Cloudflare zbuduje
+Workera sam) albo lokalnie `npm install && npx wrangler deploy`.
 
-- Zakładka **Deployments** w Twoim Workerze pokaże pasek postępu build
-  albo błąd, jeśli coś poszło nie tak.
-- Otwórz konsolę przeglądarki (F12 → Console) — jeśli WebSocket się nie
-  łączy, zobaczysz tam czerwony błąd, który można mi wkleić.
-- Jeśli zobaczysz na GitHubie Pull Request otwarty automatycznie przez
-  Cloudflare z konfiguracją — zmerguj go (to normalne przy pierwszym
-  podłączeniu repo).
+- Nazwa Workera, binding `LIST_ROOM` i klasa `ListRoom` są **bez zmian**, więc dane zostają.
+- **Migracja danych ze starej wersji dzieje się automatycznie** przy pierwszym uruchomieniu:
+  listy, produkty, szablony, ulubione, historia i notatki (HTML → tekst, kafelki dopisane na końcu)
+  trafiają do nowego formatu. Stare listy „Do wzięcia” stają się listami „Pakowanie”.
+  Oryginalne dane zostają zachowane w magazynie pod kluczami `v2bak:*`.
+- Imię wybrane w starej wersji jest przejmowane.
+
+### Opcjonalnie: klucz dostępu
+Domyślnie (jak wcześniej) każdy, kto zna adres, ma dostęp. Aby to zamknąć, dodaj w Cloudflare
+(Worker → Settings → Variables and Secrets) sekret `ACCESS_KEY`. Aplikacja poprosi o niego raz
+na każdym urządzeniu.
+
+## Rozwój lokalnie
+
+```
+npm install
+npm run dev     # http://localhost:8787
+npm test        # testy rdzenia
+```
